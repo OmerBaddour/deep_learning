@@ -1,5 +1,6 @@
 from src.deep_learning.value import Value
-from src.deep_learning.value import Op
+from src.deep_learning.op import PLUS
+from src.deep_learning.op import MULTIPLY
 from src.deep_learning.value import draw
 import pytest
 
@@ -7,23 +8,23 @@ import pytest
 def simple_value_graph() -> Value:
   a = Value(2, label='a')
   b = Value(3, label='b')
-  c = Value(label='c', children=[a, b], op=Op.PLUS)
+  c = Value(label='c', children=[a, b], op=PLUS)
 
   d = Value(5, label='d')
   e = Value(6, label='e')
-  f = Value(label='f', children=[d, e], op=Op.MULTIPLY)
+  f = Value(label='f', children=[d, e], op=MULTIPLY)
 
-  L = Value(label='L', children=[c, f], op=Op.PLUS)
+  L = Value(label='L', children=[c, f], op=PLUS)
   return L
 
 def test_basic():
   assert Value(1).data == 1.0
   
   x = Value(1) + 2
-  assert isinstance(x, Value) and x.data == 3.0 and x.op == Op.PLUS
+  assert isinstance(x, Value) and x.data == 3.0 and x.op == PLUS
   
   x = Value(1) * 2
-  assert isinstance(x, Value) and x.data == 2.0 and x.op == Op.MULTIPLY
+  assert isinstance(x, Value) and x.data == 2.0 and x.op == MULTIPLY
 
 def test_forward(simple_value_graph: Value):
   L = simple_value_graph
