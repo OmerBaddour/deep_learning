@@ -84,18 +84,18 @@ class Value:
 
     for node in reversed(topologically_sorted_graph):
       '''
-      The chain rule tells us how to compute the derivative of z = f(y), where y = g(x): https://en.wikipedia.org/wiki/Chain_rule
-      dz/dx = dz/dy * dy/dx
-      We call dy/dx the "local derivative"
-
       Limit definition of derivative: https://en.wikipedia.org/wiki/Derivative#As_a_limit
       Let y = f(a), then dy/da = lim h -> 0 of (f(a + h) - f(a)) / f(h)
       We can algebraically derive that
       - if f(a) = a + <stuff>, dy/da = 1.0
-      - if f(a) = a * <number>, dy/da = <number>
+      - if f(a) = a * <number> + <stuff>, dy/da = <number>
+      
+      The chain rule tells us how to compute the derivative of z = f(y), where y = g(x): https://en.wikipedia.org/wiki/Chain_rule
+      dz/dx = dz/dy * dy/dx
+      We call dy/dx the "local derivative"
 
       Final note: in the multivariate case: https://en.wikipedia.org/wiki/Chain_rule#Example:_arithmetic_operations
-      we do += to the gradient 
+      we do += to the gradient
       '''
       if len(node.children) > 0:
         if node.op == Op.PLUS:
