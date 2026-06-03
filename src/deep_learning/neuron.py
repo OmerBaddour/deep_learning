@@ -1,4 +1,6 @@
-from src.deep_learning.value import Op
+from src.deep_learning.op import MULTIPLY
+from src.deep_learning.op import PLUS
+from src.deep_learning.op import TANH
 from src.deep_learning.value import Value
 
 class Neuron:
@@ -12,6 +14,8 @@ class Neuron:
 
     self.weight_values = [Value(weight) for weight in self.weights]
     self.bias_value = Value(self.bias)
+
+    self._graph: Value = None
   
   def forward(
       self,
@@ -26,17 +30,26 @@ class Neuron:
       multiply_values.append(
           Value(
               label=f'w{i}x{i}',
-              op=Op.MULTIPLY,
+              op=MULTIPLY,
               children=[input_value, weight_value],
           ),
       )
 
     sum_value = Value(
         label='sum',
-        op=Op.PLUS,
+        op=PLUS,
         children=multiply_values + [self.bias_value],
     )
 
-    # TODO: add activation
-    
-    return sum_value.forward()
+    tanh_value = Value(
+        label='tanh',
+        op=TANH,
+        children=[sum_value]
+    )
+
+    self._graph = tanh_value
+    return self._graph.forward()
+
+  def backward(self) -> None:
+    assert self._graph is not None
+    self._graph.backward()

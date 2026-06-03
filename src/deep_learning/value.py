@@ -96,18 +96,10 @@ class Value:
       we do += to the gradient
       '''
       if len(node.children) > 0:
-        
-        if node.op is PLUS:
-          for child in node.children:
-            local_derivative = node.op.backward()
-            child.gradient += local_derivative * node.gradient
-        elif node.op is MULTIPLY:
-          for i, child in enumerate(node.children):
-            other_children_data = [other_child.data for j, other_child in enumerate(node.children) if i != j]
-            local_derivative = node.op.forward([other_child_data for other_child_data in other_children_data])
-            child.gradient += local_derivative * node.gradient
-        else:
-          raise NotImplementedError(f'{node.op} not supported')
+        children_local_derivatives = node.op.backward([child.data for child in node.children])
+        zipped: list[tuple[Value, float]] = zip(node.children, children_local_derivatives)
+        for child, local_derivative in zipped:
+          child.gradient += local_derivative * node.gradient
 
 def draw(root: Value) -> Digraph:
   dot = Digraph(graph_attr={'rankdir': 'LR'})

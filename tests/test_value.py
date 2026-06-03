@@ -1,6 +1,7 @@
 from src.deep_learning.value import Value
-from src.deep_learning.op import PLUS
 from src.deep_learning.op import MULTIPLY
+from src.deep_learning.op import PLUS
+from src.deep_learning.op import TANH
 from src.deep_learning.value import draw
 import pytest
 
@@ -87,3 +88,13 @@ def test_backward_multi_reference():
   y.backward()
 
   assert x.gradient == x.data * 2
+
+def test_tanh(simple_value_graph: Value):
+  x = simple_value_graph
+  L = Value(
+      label='tanh',
+      op=TANH,
+      children=[x]
+  )
+  x_forward = x.forward()
+  assert L.forward() == TANH.forward([x_forward])
