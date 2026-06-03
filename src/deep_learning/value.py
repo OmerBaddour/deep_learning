@@ -1,11 +1,10 @@
 from __future__ import annotations
-from enum import StrEnum
+from src.deep_learning.op import Op
+from src.deep_learning.op import PLUS
+from src.deep_learning.op import MULTIPLY
+from src.deep_learning.op import TANH
 from src.deep_learning.util import is_numeric
 from graphviz import Digraph
-
-class Op(StrEnum):
-  PLUS = '+'
-  MULTIPLY = '*'
 
 class Value:
   def __init__(
@@ -14,7 +13,6 @@ class Value:
       label: str = '',
       op: Op | None = None,
       children: list[Value] | None = None,
-      gradient: float = 0.0,
   ):
     if is_numeric(data):
       self.data = float(data)
@@ -24,7 +22,7 @@ class Value:
     self.label = label
     self.op = op
     self.children = [] if children is None else children
-    self.gradient = gradient
+    self.gradient = 0.0
 
   def __repr__(self) -> str:
     return f'{self.__class__.__name__}({self.__dict__})'
@@ -40,7 +38,7 @@ class Value:
 
     return Value(
         data=self.data + other_value.data,
-        op=Op.PLUS,
+        op=PLUS,
         children=[self, other_value],
     )
 
@@ -55,7 +53,7 @@ class Value:
     
     return Value(
         data=self.data * other_value.data,
-        op=Op.MULTIPLY,
+        op=MULTIPLY,
         children=[self, other_value],
     )
   
@@ -63,7 +61,7 @@ class Value:
     if len(self.children) == 0:
       return self.data
     else:
-      self.data = eval(self.op.value.join(str(value.forward()) for value in self.children))
+      self.data = self.op.forward([value.forward() for value in self.children])
       return self.data
 
   def backward(self) -> None:
@@ -98,17 +96,10 @@ class Value:
       we do += to the gradient
       '''
       if len(node.children) > 0:
-        if node.op == Op.PLUS:
-          for child in node.children:
-            local_derivative = 1.0
-            child.gradient += local_derivative * node.gradient
-        elif node.op == Op.MULTIPLY:
-          for i, child in enumerate(node.children):
-            other_children_data = [other_child.data for j, other_child in enumerate(node.children) if i != j]
-            local_derivative = eval(Op.MULTIPLY.value.join(str(other_child_data) for other_child_data in other_children_data))
-            child.gradient += local_derivative * node.gradient
-        else:
-          raise NotImplementedError(f'{node.op} not supported')
+        children_local_derivatives = node.op.backward([child.data for child in node.children])
+        zipped: list[tuple[Value, float]] = zip(node.children, children_local_derivatives)
+        for child, local_derivative in zipped:
+          child.gradient += local_derivative * node.gradient
 
 def draw(root: Value) -> Digraph:
   dot = Digraph(graph_attr={'rankdir': 'LR'})
@@ -119,10 +110,10 @@ def draw(root: Value) -> Digraph:
     seen.add(id(v))
     dot.node(str(id(v)), f'{v.label} | data {v.data:.4f} | gradient {v.gradient:.4f}', shape='record')
     if v.op:
-      dot.node(str(id(v)) + v.op, v.op)
-      dot.edge(str(id(v)) + v.op, str(id(v)))
+      dot.node(str(id(v)) + v.op.to_string(), v.op.to_string())
+      dot.edge(str(id(v)) + v.op.to_string(), str(id(v)))
     for child in v.children:
       build(child)
-      dot.edge(str(id(child)), str(id(v)) + v.op)
+      dot.edge(str(id(child)), str(id(v)) + v.op.to_string())
   build(root)
   return dot

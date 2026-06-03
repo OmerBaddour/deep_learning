@@ -1,4 +1,5 @@
 from src.deep_learning.neuron import Neuron
+from src.deep_learning.op import TANH
 import pytest
 
 def test_basic():
@@ -9,4 +10,4 @@ def test_basic():
   forward_result = neuron.forward(
       inputs=[1.0, 2.0, 3.0],
   )
-  assert forward_result == (1.0 ** 2 + 2.0 ** 2 + 3.0 ** 2 + 5.0)
+  assert forward_result == TANH.forward([1.0 ** 2 + 2.0 ** 2 + 3.0 ** 2 + 5.0])
