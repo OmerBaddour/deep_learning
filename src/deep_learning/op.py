@@ -63,9 +63,7 @@ class Tanh(Op):
     return (math.e ** (2 * input) - 1) / (math.e ** (2 * input) + 1)
 
   def backward(self, inputs: list[float]) -> float:
-    assert len(inputs) == 1
-    input = inputs[0]
-    return 1 - self.forward(input) ** 2
+    return 1 - self.forward(inputs) ** 2
 
 
 PLUS = Plus()
