@@ -14,7 +14,7 @@ class Op(ABC):
     raise NotImplementedError()
   
   @abstractmethod
-  def backward(self, inputs: list[float]) -> float:
+  def backward(self, inputs: list[float]) -> list[float]:
     '''
     Local derivative for each child given the data of its siblings
     '''
@@ -29,7 +29,7 @@ class Plus(Op):
   def forward(self, inputs: list[float]) -> float:
     return sum(inputs)
   
-  def backward(self, inputs: list[float]) -> float:
+  def backward(self, inputs: list[float]) -> list[float]:
     return [1.0 for _ in inputs]
 
 
@@ -44,7 +44,7 @@ class Multiply(Op):
       result *= input
     return result
 
-  def backward(self, inputs: list[float]) -> float:
+  def backward(self, inputs: list[float]) -> list[float]:
     product = self.forward(inputs)
     result = [product for _ in inputs]
     for i, child_data in enumerate(inputs):
@@ -62,8 +62,8 @@ class Tanh(Op):
     input = inputs[0]
     return (math.e ** (2 * input) - 1) / (math.e ** (2 * input) + 1)
 
-  def backward(self, inputs: list[float]) -> float:
-    return 1 - self.forward(inputs) ** 2
+  def backward(self, inputs: list[float]) -> list[float]:
+    return [1 - self.forward(inputs) ** 2]
 
 
 PLUS = Plus()
