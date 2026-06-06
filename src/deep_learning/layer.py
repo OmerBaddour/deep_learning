@@ -15,14 +15,14 @@ class Layer:
   
   def forward(
       self,
-      inputs: list[list[float]],
+      inputs: list[float],
   ) -> list[float]:
     for input in inputs:
       assert len(input) == self.num_neuron_weights
     
     outputs: list[float] = []
     for neuron, input in zip(self.neurons, inputs):
-      outputs.append(neuron.forward(input))
+      outputs.append(neuron.forward([input]))
     return outputs
 
   def backward(self) -> None:

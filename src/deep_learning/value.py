@@ -57,12 +57,14 @@ class Value:
         children=[self, other_value],
     )
   
-  def forward(self) -> float:
+  def forward(self) -> Value:
     if len(self.children) == 0:
-      return self.data
+      return self
     else:
-      self.data = self.op.forward([value.forward() for value in self.children])
-      return self.data
+      for child in self.children:
+        child.forward()
+      self.data = self.op.forward([child.data for child in self.children])
+      return self
 
   def backward(self) -> None:
     # topologically sort graph

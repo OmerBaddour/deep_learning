@@ -14,12 +14,12 @@ class MultiLayerPerceptron:
 
   def forward(
       self,
-      inputs: list[list[float]],
-  ) -> list[float]:
+      inputs: list[float],
+  ) -> float:
     for input in inputs:
       assert len(input) == len(self.layers[0].neurons[0].weights)
     
-    current_input: list[list[float]] = inputs
+    current_input: list[float] = inputs
     current_output: list[float] = None
     for i in range(0, len(self.layers) - 1):
       current_output = self.layers[i].forward(current_input)

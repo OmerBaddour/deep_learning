@@ -10,6 +10,7 @@ class Neuron:
       bias: float,
   ):
     self.weights = weights
+    assert len(self.weights) > 0
     self.bias = bias
 
     self.weight_values = [Value(weight) for weight in self.weights]
@@ -19,10 +20,11 @@ class Neuron:
   
   def forward(
       self,
-      inputs: list[float],
-  ) -> float:
+      inputs: list[float | Value],
+  ) -> Value:
     assert len(inputs) == len(self.weights)
-    input_values = [Value(input) for input in inputs]
+    if isinstance(inputs[0], float):
+      input_values = [Value(input) for input in inputs]
 
     # construct graph out of Values, then call Value.forward()
     multiply_values: list[Value] = []

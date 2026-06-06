@@ -38,7 +38,7 @@ def test_forward(simple_value_graph: Value):
   b = c.children[1]
   a = c.children[0]
 
-  assert L.forward() == 35.0
+  assert L.forward().data == 35.0
 
   assert a.data == 2.0
   assert b.data == 3.0
@@ -97,4 +97,4 @@ def test_tanh(simple_value_graph: Value):
       children=[x]
   )
   x_forward = x.forward()
-  assert L.forward() == TANH.forward([x_forward])
+  assert L.forward().data == TANH.forward([x_forward.data])

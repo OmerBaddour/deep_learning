@@ -67,4 +67,5 @@ def test_basic():
           [1.0, 2.0, 3.0],
       ],
   )
+  multi_layer_perceptron.layers[-1].neurons[0]._graph.gradient = 1.0
   multi_layer_perceptron.backward()
