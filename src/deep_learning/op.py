@@ -9,6 +9,9 @@ class Op(ABC):
   def to_string(self) -> str:
     raise NotImplementedError()
   
+  def __repr__(self) -> str:
+    return self.to_string()
+  
   @abstractmethod
   def forward(self, inputs: list[float]) -> float:
     raise NotImplementedError()
@@ -45,11 +48,16 @@ class Multiply(Op):
     return result
 
   def backward(self, inputs: list[float]) -> list[float]:
-    product = self.forward(inputs)
-    result = [product for _ in inputs]
-    for i, child_data in enumerate(inputs):
-      result[i] /= child_data
-    return result
+    '''
+    Identical problem to https://leetcode.com/problems/product-of-array-except-self/
+    '''
+    product_before = [1.0] * len(inputs)
+    product_after = [1.0] * len(inputs)
+    for i in range(1, len(inputs)):
+      product_before[i] = product_before[i-1] * inputs[i-1]
+    for i in range(len(inputs)-2, -1, -1):
+      product_after[i] = product_after[i+1] * inputs[i+1]
+    return [before * after for (before, after) in zip(product_before, product_after)]
 
 
 class Tanh(Op):
