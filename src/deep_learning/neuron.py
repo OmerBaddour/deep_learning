@@ -29,7 +29,8 @@ class Neuron:
       if isinstance(input, float):
         input_values.append(Value(input, label=label))
       elif isinstance(input, Value):
-        input.label = label
+        if input.label == '':
+          input.label = label
         input_values.append(input)
       else:
         raise TypeError('Unsupported type')

@@ -67,8 +67,8 @@ class Tanh(Op):
   
   def forward(self, inputs: list[float]) -> float:
     assert len(inputs) == 1
-    input = inputs[0]
-    return (math.e ** (2 * input) - 1) / (math.e ** (2 * input) + 1)
+    # math.tanh saturates to +/-1 for large |x| instead of overflowing on e**(2x)
+    return math.tanh(inputs[0])
 
   def backward(self, inputs: list[float]) -> list[float]:
     return [1 - self.forward(inputs) ** 2]
