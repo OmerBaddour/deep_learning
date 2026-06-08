@@ -1,5 +1,6 @@
 from __future__ import annotations
 from src.deep_learning.op import Op
+from src.deep_learning.op import EXPONENTIATE
 from src.deep_learning.op import PLUS
 from src.deep_learning.op import MULTIPLY
 from src.deep_learning.op import TANH
@@ -55,6 +56,21 @@ class Value:
         data=self.data * other_value.data,
         op=MULTIPLY,
         children=[self, other_value],
+    )
+
+  def __pow__(self, other: float | int) -> Value:
+    other_value = None
+    if isinstance(other, Value):
+      other_value = other
+    elif is_numeric(other):
+      other_value = Value(data=float(other))
+    if other_value is None:
+      return NotImplemented
+
+    return Value(
+        data=self.data ** other_value.data,
+        op=EXPONENTIATE,
+        children=[self, other_value]
     )
   
   def forward(self) -> Value:

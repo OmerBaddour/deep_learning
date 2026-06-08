@@ -15,6 +15,7 @@ class Op(ABC):
   @abstractmethod
   def forward(self, inputs: list[float]) -> float:
     raise NotImplementedError()
+    
   
   @abstractmethod
   def backward(self, inputs: list[float]) -> list[float]:
@@ -60,6 +61,19 @@ class Multiply(Op):
     return [before * after for (before, after) in zip(product_before, product_after)]
 
 
+class Exponentiate(Op):
+  def to_string(self) -> str:
+    return 'exponentiate'
+
+  def forward(self, inputs: list[float]) -> float:
+    assert len(inputs) == 2
+    return inputs[0] ** inputs[1]
+
+  def backward(self, inputs: list[float]) -> list[float]:
+    assert len(inputs) == 2
+    return [inputs[1] * self.forward([inputs[0], inputs[1] - 1])]
+
+
 class Tanh(Op):
   
   def to_string(self) -> str:
@@ -76,4 +90,5 @@ class Tanh(Op):
 
 PLUS = Plus()
 MULTIPLY = Multiply()
+EXPONENTIATE = Exponentiate()
 TANH = Tanh()
