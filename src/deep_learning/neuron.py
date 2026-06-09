@@ -10,28 +10,39 @@ class Neuron:
       bias: float,
   ):
     self.weights = weights
+    assert len(self.weights) > 0
     self.bias = bias
 
-    self.weight_values = [Value(weight) for weight in self.weights]
-    self.bias_value = Value(self.bias)
+    self.weight_values: list[Value] = []
+    for i, weight in enumerate(self.weights):
+      self.weight_values.append(Value(weight, label=f'w{i}'))
+    self.bias_value = Value(self.bias, label='b')
 
-    self._graph: Value = None
-  
   def forward(
       self,
-      inputs: list[float],
-  ) -> float:
+      inputs: list[float | Value],
+  ) -> Value:
     assert len(inputs) == len(self.weights)
-    input_values = [Value(input) for input in inputs]
+    input_values: list[Value] = []
+    for i, input in enumerate(inputs):
+      label = f'x{i}'
+      if isinstance(input, float):
+        input_values.append(Value(input, label=label))
+      elif isinstance(input, Value):
+        if input.label == '':
+          input.label = label
+        input_values.append(input)
+      else:
+        raise TypeError('Unsupported type')
 
     # construct graph out of Values, then call Value.forward()
     multiply_values: list[Value] = []
-    for i, (input_value, weight_value) in enumerate(zip(input_values, self.weight_values), start=1):
+    for i, (weight_value, input_value) in enumerate(zip(self.weight_values, input_values)):
       multiply_values.append(
           Value(
               label=f'w{i}x{i}',
               op=MULTIPLY,
-              children=[input_value, weight_value],
+              children=[weight_value, input_value],
           ),
       )
 
@@ -47,9 +58,4 @@ class Neuron:
         children=[sum_value]
     )
 
-    self._graph = tanh_value
-    return self._graph.forward()
-
-  def backward(self) -> None:
-    assert self._graph is not None
-    self._graph.backward()
+    return tanh_value.forward()

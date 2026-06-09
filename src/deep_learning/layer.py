@@ -1,4 +1,7 @@
+import math
+import random
 from src.deep_learning.neuron import Neuron
+from src.deep_learning.value import Value
 
 class Layer:
   def __init__(
@@ -15,16 +18,26 @@ class Layer:
   
   def forward(
       self,
-      inputs: list[list[float]],
-  ) -> list[float]:
-    for input in inputs:
-      assert len(input) == self.num_neuron_weights
-    
-    outputs: list[float] = []
-    for neuron, input in zip(self.neurons, inputs):
-      outputs.append(neuron.forward(input))
+      inputs: list[float | Value],
+  ) -> list[Value]:
+    assert len(inputs) == self.num_neuron_weights
+
+    outputs: list[Value] = []
+    for neuron in self.neurons:
+      outputs.append(neuron.forward(inputs))
     return outputs
 
-  def backward(self) -> None:
-    for neuron in self.neurons:
-      neuron.backward()
+def get_random_layer(
+    num_neurons: int,
+    num_weights_per_neuron: int,
+) -> Layer:
+  std = math.sqrt(1 / num_weights_per_neuron)  # Xavier, suited to tanh
+  neurons: list[Neuron] = []
+  for _ in range(num_neurons):
+    neurons.append(
+        Neuron(
+            weights=[random.gauss(0, std) for _ in range(num_weights_per_neuron)],
+            bias=0.0,
+        )
+    )
+  return Layer(neurons)

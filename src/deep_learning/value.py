@@ -1,5 +1,6 @@
 from __future__ import annotations
 from src.deep_learning.op import Op
+from src.deep_learning.op import EXPONENTIATE
 from src.deep_learning.op import PLUS
 from src.deep_learning.op import MULTIPLY
 from src.deep_learning.op import TANH
@@ -56,13 +57,30 @@ class Value:
         op=MULTIPLY,
         children=[self, other_value],
     )
+
+  def __pow__(self, other: float | int) -> Value:
+    other_value = None
+    if isinstance(other, Value):
+      other_value = other
+    elif is_numeric(other):
+      other_value = Value(data=float(other))
+    if other_value is None:
+      return NotImplemented
+
+    return Value(
+        data=self.data ** other_value.data,
+        op=EXPONENTIATE,
+        children=[self, other_value]
+    )
   
-  def forward(self) -> float:
+  def forward(self) -> Value:
     if len(self.children) == 0:
-      return self.data
+      return self
     else:
-      self.data = self.op.forward([value.forward() for value in self.children])
-      return self.data
+      for child in self.children:
+        child.forward()
+      self.data = self.op.forward([child.data for child in self.children])
+      return self
 
   def backward(self) -> None:
     # topologically sort graph
