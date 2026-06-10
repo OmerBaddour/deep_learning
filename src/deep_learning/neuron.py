@@ -1,3 +1,4 @@
+from src.deep_learning.op import Op
 from src.deep_learning.op import MULTIPLY
 from src.deep_learning.op import PLUS
 from src.deep_learning.op import TANH
@@ -8,6 +9,7 @@ class Neuron:
       self,
       weights: list[float],
       bias: float,
+      activation: Op | None = None,
   ):
     self.weights = weights
     assert len(self.weights) > 0
@@ -17,6 +19,8 @@ class Neuron:
     for i, weight in enumerate(self.weights):
       self.weight_values.append(Value(weight, label=f'w{i}'))
     self.bias_value = Value(self.bias, label='b')
+
+    self.activation = activation
 
   def forward(
       self,
@@ -46,16 +50,17 @@ class Neuron:
           ),
       )
 
-    sum_value = Value(
+    value = Value(
         label='sum',
         op=PLUS,
         children=multiply_values + [self.bias_value],
     )
 
-    tanh_value = Value(
-        label='tanh',
-        op=TANH,
-        children=[sum_value]
-    )
+    if self.activation is not None:
+      value = Value(
+          label=self.activation.to_string(),
+          op=self.activation,
+          children=[value]
+      )
 
-    return tanh_value.forward()
+    return value.forward()

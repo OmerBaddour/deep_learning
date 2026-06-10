@@ -1,11 +1,19 @@
 from __future__ import annotations
+from typing import Any
 from src.deep_learning.op import Op
+from src.deep_learning.op import DIVIDE
 from src.deep_learning.op import EXPONENTIATE
 from src.deep_learning.op import PLUS
 from src.deep_learning.op import MULTIPLY
-from src.deep_learning.op import TANH
-from src.deep_learning.util import is_numeric
-from graphviz import Digraph
+
+
+def _is_numeric(x: Any) -> bool:
+  try:
+    float(x)
+    return True
+  except:
+    return False
+
 
 class Value:
   def __init__(
@@ -15,7 +23,7 @@ class Value:
       op: Op | None = None,
       children: list[Value] | None = None,
   ):
-    if is_numeric(data):
+    if _is_numeric(data):
       self.data = float(data)
     else:
       raise ValueError()
@@ -28,47 +36,92 @@ class Value:
   def __repr__(self) -> str:
     return f'{self.__class__.__name__}({self.__dict__})'
 
-  def __add__(self, other: float | int) -> Value:
+  def __add__(self, other: float | int | Value) -> Value:
     other_value = None
     if isinstance(other, Value):
       other_value = other
-    elif is_numeric(other):
+    elif _is_numeric(other):
       other_value = Value(data=float(other))
     if other_value is None:
       return NotImplemented
 
     return Value(
-        data=self.data + other_value.data,
+        data=PLUS.forward([self.data, other_value.data]),
         op=PLUS,
         children=[self, other_value],
     )
-
-  def __mul__(self, other: float | int) -> Value:
+  
+  def __radd__(self, other: float | int) -> Value:
+    return self + other
+  
+  def __sub__(self, other: float | int | Value) -> Value:
     other_value = None
     if isinstance(other, Value):
       other_value = other
-    elif is_numeric(other):
+    elif _is_numeric(other):
+      other_value = Value(data=float(other))
+    if other_value is None:
+      return NotImplemented
+
+    return Value(
+        data=PLUS.forward([self.data, -other_value.data]),
+        op=PLUS,
+        children=[self, other_value],
+    )
+  
+  def __rsub__(self, other: float | int) -> Value:
+    return self - other
+
+  def __mul__(self, other: float | int | Value) -> Value:
+    other_value = None
+    if isinstance(other, Value):
+      other_value = other
+    elif _is_numeric(other):
       other_value = Value(data=float(other))
     if other_value is None:
       return NotImplemented
     
     return Value(
-        data=self.data * other_value.data,
+        data=MULTIPLY.forward([self.data, other_value.data]),
         op=MULTIPLY,
         children=[self, other_value],
     )
-
-  def __pow__(self, other: float | int) -> Value:
+  
+  def __rmul__(self, other: float | int) -> Value:
+    return self * other
+  
+  def __truediv__(self, other: float | int | Value) -> Value:
     other_value = None
     if isinstance(other, Value):
       other_value = other
-    elif is_numeric(other):
+    elif _is_numeric(other):
+      other_value = Value(data=float(other))
+    if other_value is None:
+      return NotImplemented
+    
+    return Value(
+        data=DIVIDE.forward([self.data, other_value.data]),
+        op=DIVIDE,
+        children=[self, other_value]
+    )
+  
+  def __rtruediv__(self, other: float | int) -> Value:
+    return self / other
+  
+  def __neg__(self) -> Value:
+    return self * -1
+
+  def __pow__(self, other: float | int | Value) -> Value:
+    other_value = None
+    if isinstance(other, Value):
+      other_value = other
+    elif _is_numeric(other):
       other_value = Value(data=float(other))
     if other_value is None:
       return NotImplemented
 
     return Value(
-        data=self.data ** other_value.data,
+        data=EXPONENTIATE.forward([self.data, other_value.data]),
         op=EXPONENTIATE,
         children=[self, other_value]
     )
@@ -118,20 +171,3 @@ class Value:
         zipped: list[tuple[Value, float]] = zip(node.children, children_local_derivatives)
         for child, local_derivative in zipped:
           child.gradient += local_derivative * node.gradient
-
-def draw(root: Value) -> Digraph:
-  dot = Digraph(graph_attr={'rankdir': 'LR'})
-  seen = set()
-  def build(v: Value):
-    if id(v) in seen:
-      return
-    seen.add(id(v))
-    dot.node(str(id(v)), f'{v.label} | data {v.data:.4f} | gradient {v.gradient:.4f}', shape='record')
-    if v.op:
-      dot.node(str(id(v)) + v.op.to_string(), v.op.to_string())
-      dot.edge(str(id(v)) + v.op.to_string(), str(id(v)))
-    for child in v.children:
-      build(child)
-      dot.edge(str(id(child)), str(id(v)) + v.op.to_string())
-  build(root)
-  return dot

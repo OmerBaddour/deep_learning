@@ -1,8 +1,69 @@
-from typing import Any
+from src.deep_learning.value import Value
+import math
+from src.deep_learning.op import DIVIDE
+from src.deep_learning.op import EXPONENTIATE
+from src.deep_learning.op import PLUS
+from graphviz import Digraph
 
-def is_numeric(x: Any) -> bool:
-  try:
-    float(x)
-    return True
-  except:
-    return False
+
+def draw(root: Value) -> Digraph:
+  dot = Digraph(graph_attr={'rankdir': 'LR'})
+  seen = set()
+  def build(v: Value):
+    if id(v) in seen:
+      return
+    seen.add(id(v))
+    dot.node(str(id(v)), f'{v.label} | data {v.data:.4f} | gradient {v.gradient:.4f}', shape='record')
+    if v.op:
+      dot.node(str(id(v)) + v.op.to_string(), v.op.to_string())
+      dot.edge(str(id(v)) + v.op.to_string(), str(id(v)))
+    for child in v.children:
+      build(child)
+      dot.edge(str(id(child)), str(id(v)) + v.op.to_string())
+  build(root)
+  return dot
+
+
+def sum_mean_squared_error(
+    outputs: list[float],
+    predicted_outputs: list[Value],
+) -> Value:
+  assert len(outputs) == len(predicted_outputs)
+  sum_squared_error_value = Value(0.0)
+  for output, predicted_output in zip(outputs, predicted_outputs):
+    output_value = Value(output)
+    predicted_output_value = predicted_output
+    error_value = output_value - predicted_output_value
+    squared_error_value = error_value ** 2
+    sum_squared_error_value += squared_error_value
+  mean_sum_squared_error_value = sum_squared_error_value / len(predicted_outputs)
+  return mean_sum_squared_error_value
+
+
+def softmax(input_values: list[Value]) -> list[Value]:
+  softmax_numerators: list[Value] = []
+  softmax_layer: list[Value] = []
+  e_value = Value(math.e, label='e')
+  for input in input_values:
+    softmax_numerators.append(
+        Value(
+            label=EXPONENTIATE.to_string(),
+            op=EXPONENTIATE,
+            children=[e_value, input],
+        ),
+    )
+  softmax_denominator = Value(
+      label=PLUS.to_string(),
+      op=PLUS,
+      children=softmax_numerators,
+  )
+
+  for softmax_numerator in softmax_numerators:
+    softmax_layer.append(
+        Value(
+            label=DIVIDE.to_string(),
+            op=DIVIDE,
+            children=[softmax_numerator, softmax_denominator]
+        )
+    )
+  return softmax_layer

@@ -3,13 +3,25 @@ from src.deep_learning.op import TANH
 import pytest
 
 
-def test_forward_matches_tanh_of_preactivation():
+def test_forward_without_activation_is_weighted_sum():
   '''Forward pass: output is tanh(w . x + b).'''
   weights = [0.1, -0.2, 0.05]
   bias = 0.1
   inputs = [0.3, -0.4, 0.2]
 
   neuron = Neuron(weights=weights, bias=bias)
+  value = neuron.forward(inputs=inputs)
+
+  assert value.data == sum(w * x for w, x in zip(weights, inputs)) + bias
+
+
+def test_forward_matches_tanh_of_preactivation():
+  '''Forward pass: output is tanh(w . x + b).'''
+  weights = [0.1, -0.2, 0.05]
+  bias = 0.1
+  inputs = [0.3, -0.4, 0.2]
+
+  neuron = Neuron(weights=weights, bias=bias, activation=TANH)
   value = neuron.forward(inputs=inputs)
 
   preactivation = sum(w * x for w, x in zip(weights, inputs)) + bias
@@ -30,7 +42,7 @@ def test_backward_matches_finite_differences():
   h = 1e-6
 
   # Analytic gradients via backward().
-  neuron = Neuron(weights=weights, bias=bias)
+  neuron = Neuron(weights=weights, bias=bias, activation=TANH)
   out = neuron.forward(inputs=inputs)
   out.gradient = 1.0
   out.backward()

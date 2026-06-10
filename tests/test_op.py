@@ -1,6 +1,10 @@
+from src.deep_learning.op import DIVIDE
 from src.deep_learning.op import MULTIPLY
 import pytest
 
+
+def test_multiply_backward_simple():
+  assert MULTIPLY.backward([2.0, 3.0]) == [3.0, 2.0]
 
 def test_multiply_backward_no_zeros():
   '''Local derivative of a product is the product of the other factors.'''
@@ -15,3 +19,10 @@ def test_multiply_backward_single_zero():
 def test_multiply_backward_two_zeros():
   '''Two zero factors make every position 0 -- the case division can't handle.'''
   assert MULTIPLY.backward([0.0, 0.0, 4.0]) == [0.0, 0.0, 0.0]
+
+
+def test_divide():
+  a = 10.0
+  b = 5.0
+  assert DIVIDE.forward([a, b]) == 10.0 / 5.0
+  assert DIVIDE.backward([a, b]) == MULTIPLY.backward([a, 1/b]) == [1/b, a]

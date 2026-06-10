@@ -72,6 +72,28 @@ class Exponentiate(Op):
   def backward(self, inputs: list[float]) -> list[float]:
     assert len(inputs) == 2
     return [inputs[1] * self.forward([inputs[0], inputs[1] - 1])]
+  
+
+class Divide(Op):
+  '''
+  Express a / b as a * b ** -1
+  '''
+  def to_string(self) -> str:
+    return 'divide'
+  
+  def forward(self, inputs: list[float]) -> float:
+    assert len(inputs) == 2
+    return Multiply().forward([
+        inputs[0],
+        Exponentiate().forward([inputs[1], -1]),
+    ])
+  
+  def backward(self, inputs: list[float]) -> list[float]:
+    assert len(inputs) == 2
+    return Multiply().backward([
+        inputs[0],
+        Exponentiate().forward([inputs[1], -1]),
+    ])
 
 
 class Tanh(Op):
@@ -91,4 +113,5 @@ class Tanh(Op):
 PLUS = Plus()
 MULTIPLY = Multiply()
 EXPONENTIATE = Exponentiate()
+DIVIDE = Divide()
 TANH = Tanh()
