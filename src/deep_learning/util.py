@@ -2,6 +2,7 @@ from src.deep_learning.value import Value
 import math
 from src.deep_learning.op import DIVIDE
 from src.deep_learning.op import EXPONENTIATE
+from src.deep_learning.op import LOGARITHM
 from src.deep_learning.op import PLUS
 from graphviz import Digraph
 
@@ -67,3 +68,23 @@ def softmax(input_values: list[Value]) -> list[Value]:
         )
     )
   return softmax_layer
+
+
+def cross_entropy(
+    distribution: list[float],
+    predicted_distribution: list[Value],
+ ) -> Value:
+  assert len(distribution) == len(predicted_distribution)
+
+  terms: list[Value] = []
+  epsilon = 1e-16  # adding prevents log(0) error without disturbing the distribution
+  for event, predicted_event in zip([Value(event) for event in distribution], predicted_distribution):
+    event.data += epsilon
+    predicted_event.data += epsilon
+    terms.append(event * LOGARITHM.forward([predicted_event.data, 2]))
+
+  return -Value(
+      label=PLUS.to_string(),
+      op=PLUS,
+      children=terms,
+  ).forward()

@@ -72,7 +72,26 @@ class Exponentiate(Op):
   def backward(self, inputs: list[float]) -> list[float]:
     assert len(inputs) == 2
     return [inputs[1] * self.forward([inputs[0], inputs[1] - 1])]
+
+
+class Logarithm(Op):
+  def to_string(self) -> str:
+    return 'logarithm'
   
+  def forward(self, inputs: list[float]) -> float:
+    '''
+    inputs[0] = x, inputs[1] = base
+    '''
+    assert len(inputs) == 2
+    return math.log(
+        inputs[0],  # x
+        inputs[1],  # base
+    )
+  
+  def backward(self, inputs: list[float]) -> list[float]:
+    assert len(inputs) == 2
+    return [1 / (inputs[0] * math.log(inputs[1]))]
+
 
 class Divide(Op):
   '''
@@ -114,4 +133,5 @@ PLUS = Plus()
 MULTIPLY = Multiply()
 EXPONENTIATE = Exponentiate()
 DIVIDE = Divide()
+LOGARITHM = Logarithm()
 TANH = Tanh()
