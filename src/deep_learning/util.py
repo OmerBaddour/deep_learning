@@ -71,7 +71,7 @@ def softmax(input_values: list[Value]) -> list[Value]:
 
 
 def cross_entropy(
-    distribution: list[float],
+    distribution: list[float | int],
     predicted_distribution: list[Value],
  ) -> Value:
   assert len(distribution) == len(predicted_distribution)
