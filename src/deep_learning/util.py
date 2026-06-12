@@ -48,13 +48,11 @@ def softmax(input_values: list[Value]) -> list[Value]:
   for input in input_values:
     softmax_numerators.append(
         Value(
-            label=EXPONENTIATE.to_string(),
             op=EXPONENTIATE,
             children=[e_value, input],
         ),
     )
   softmax_denominator = Value(
-      label=PLUS.to_string(),
       op=PLUS,
       children=softmax_numerators,
   )
@@ -62,7 +60,6 @@ def softmax(input_values: list[Value]) -> list[Value]:
   for softmax_numerator in softmax_numerators:
     softmax_layer.append(
         Value(
-            label=DIVIDE.to_string(),
             op=DIVIDE,
             children=[softmax_numerator, softmax_denominator]
         )
@@ -79,12 +76,11 @@ def cross_entropy(
   terms: list[Value] = []
   epsilon = 1e-16  # adding prevents log(0) error without disturbing the distribution
   for event, predicted_event in zip([Value(event) for event in distribution], predicted_distribution):
-    event.data += epsilon
-    predicted_event.data += epsilon
-    terms.append(event * LOGARITHM.forward([predicted_event.data, 2]))
+    event_plus_epsilon = event + epsilon
+    predicted_event_plus_epsilon = predicted_event + epsilon
+    terms.append(event_plus_epsilon * Value(op=LOGARITHM, children=[predicted_event_plus_epsilon, Value(2)]))
 
   return -Value(
-      label=PLUS.to_string(),
       op=PLUS,
       children=terms,
-  ).forward()
+  )

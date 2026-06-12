@@ -4,6 +4,7 @@ from src.deep_learning.op import Op
 from src.deep_learning.op import DIVIDE
 from src.deep_learning.op import EXPONENTIATE
 from src.deep_learning.op import PLUS
+from src.deep_learning.op import MINUS
 from src.deep_learning.op import MULTIPLY
 
 
@@ -46,7 +47,6 @@ class Value:
       return NotImplemented
 
     return Value(
-        data=PLUS.forward([self.data, other_value.data]),
         op=PLUS,
         children=[self, other_value],
     )
@@ -64,8 +64,7 @@ class Value:
       return NotImplemented
 
     return Value(
-        data=PLUS.forward([self.data, -other_value.data]),
-        op=PLUS,
+        op=MINUS,
         children=[self, other_value],
     )
   
@@ -82,7 +81,6 @@ class Value:
       return NotImplemented
     
     return Value(
-        data=MULTIPLY.forward([self.data, other_value.data]),
         op=MULTIPLY,
         children=[self, other_value],
     )
@@ -100,7 +98,6 @@ class Value:
       return NotImplemented
     
     return Value(
-        data=DIVIDE.forward([self.data, other_value.data]),
         op=DIVIDE,
         children=[self, other_value]
     )
@@ -121,7 +118,6 @@ class Value:
       return NotImplemented
 
     return Value(
-        data=EXPONENTIATE.forward([self.data, other_value.data]),
         op=EXPONENTIATE,
         children=[self, other_value]
     )
@@ -138,16 +134,19 @@ class Value:
   def backward(self) -> None:
     # topologically sort graph
     topologically_sorted_graph: list[Value] = []
+    set_topologically_sorted_graph: set[Value] = {}
     
     def do_topological_sort(node: Value) -> None:
       # NOTE: assume acyclic for simplicity
       if len(node.children) == 0:
-        if node not in topologically_sorted_graph:
+        if node not in set_topologically_sorted_graph:
+          set_topologically_sorted_graph.add(node)
           topologically_sorted_graph.append(node)
       else:
         for child in node.children:
           do_topological_sort(child)
-        if node not in topologically_sorted_graph:
+        if node not in set_topologically_sorted_graph:
+          set_topologically_sorted_graph.add(node)
           topologically_sorted_graph.append(node)
     do_topological_sort(self)
 

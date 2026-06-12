@@ -37,6 +37,20 @@ class Plus(Op):
     return [1.0 for _ in inputs]
 
 
+class Minus(Op):
+  
+  def to_string(self) -> str:
+    return '-'
+  
+  def forward(self, inputs: list[float]) -> float:
+    assert len(inputs) == 2
+    return inputs[0] - inputs[1]
+  
+  def backward(self, inputs: list[float]) -> list[float]:
+    assert len(inputs) == 2
+    return [1.0, -1.0]
+
+
 class Multiply(Op):
   
   def to_string(self) -> str:
@@ -130,6 +144,7 @@ class Tanh(Op):
 
 
 PLUS = Plus()
+MINUS = Minus()
 MULTIPLY = Multiply()
 EXPONENTIATE = Exponentiate()
 DIVIDE = Divide()
