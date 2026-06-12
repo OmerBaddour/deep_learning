@@ -36,6 +36,7 @@ def test_sum_mean_squared_error(simple_value_list: list[Value]) -> None:
       outputs,
       predicted_outputs,
   )
+  error_value.forward()
   assert error_value.data == 1.0
 
 
@@ -65,6 +66,7 @@ def test_cross_entropy(simple_value_list: list[Value]) -> None:
       distribution=[value.data for value in distribution],
       predicted_distribution=distribution,
   )
+  self_cross_entropy.forward()
 
   other_distribution = softmax([Value(value.data ** 2) for value in simple_value_list])
   for value in other_distribution:
@@ -73,4 +75,6 @@ def test_cross_entropy(simple_value_list: list[Value]) -> None:
       distribution=[value.data for value in distribution],
       predicted_distribution=other_distribution,
   )
+  other_cross_entropy.forward()
+  
   assert self_cross_entropy.data < other_cross_entropy.data

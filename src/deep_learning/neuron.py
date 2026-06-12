@@ -22,7 +22,7 @@ class Neuron:
 
     self.activation = activation
 
-  def forward(
+  def build_graph(
       self,
       inputs: list[float | Value],
   ) -> Value:

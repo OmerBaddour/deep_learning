@@ -16,7 +16,7 @@ class Layer:
     for neuron in self.neurons:
       assert len(neuron.weights) == self.num_neuron_weights
   
-  def forward(
+  def build_graph(
       self,
       inputs: list[float | Value],
   ) -> list[Value]:
@@ -24,7 +24,7 @@ class Layer:
 
     outputs: list[Value] = []
     for neuron in self.neurons:
-      outputs.append(neuron.forward(inputs))
+      outputs.append(neuron.build_graph(inputs))
     return outputs
 
 def get_random_layer(

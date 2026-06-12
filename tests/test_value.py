@@ -23,9 +23,11 @@ def test_basic():
   assert Value(1).data == 1.0
   
   x = Value(1) + 2
+  x.forward()
   assert isinstance(x, Value) and x.data == 3.0 and x.op == PLUS
   
   x = Value(1) * 2
+  x.forward()
   assert isinstance(x, Value) and x.data == 2.0 and x.op == MULTIPLY
 
 

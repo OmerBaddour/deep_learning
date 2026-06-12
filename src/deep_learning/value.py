@@ -15,6 +15,23 @@ def _is_numeric(x: Any) -> bool:
   except:
     return False
 
+'''
+TODO: can I set `data: float | int | None = None,`?
+if so I could have `Value.__init__()` do:
+```
+if data is None:
+  self.data = data
+elif _is_numeric(data):
+  self.data = float(data)
+else:
+  raise ValueError()
+```
+and could have `Value.forward()` do:
+```
+if len(self.children) == 0:
+  assert self.data is not None
+```
+'''
 
 class Value:
   def __init__(
@@ -123,32 +140,45 @@ class Value:
     )
   
   def forward(self) -> Value:
-    if len(self.children) == 0:
-      return self
-    else:
-      for child in self.children:
-        child.forward()
-      self.data = self.op.forward([child.data for child in self.children])
-      return self
+    visited: set[Value] = set()
+
+    def _traverse(node: Value, visited: set[Value]) -> None:
+      if node in visited:
+        return
+      elif len(node.children) == 0:
+        visited.add(node)
+        return
+      else:
+        for child in node.children:
+          _traverse(child, visited)
+        node.data = node.op.forward([child.data for child in node.children])
+        visited.add(node)
+    
+    _traverse(self, visited)
+    return self
 
   def backward(self) -> None:
     # topologically sort graph
     topologically_sorted_graph: list[Value] = []
-    set_topologically_sorted_graph: set[Value] = {}
+    visited: set[Value] = set()
     
-    def do_topological_sort(node: Value) -> None:
+    def _traverse(
+        node: Value,
+        topologically_sorted_graph: list[Value],
+        visited: set[Value],
+    ) -> None:
       # NOTE: assume acyclic for simplicity
-      if len(node.children) == 0:
-        if node not in set_topologically_sorted_graph:
-          set_topologically_sorted_graph.add(node)
-          topologically_sorted_graph.append(node)
+      if node in visited:
+        return
+      elif len(node.children) == 0:
+        visited.add(node)
+        topologically_sorted_graph.append(node)
       else:
         for child in node.children:
-          do_topological_sort(child)
-        if node not in set_topologically_sorted_graph:
-          set_topologically_sorted_graph.add(node)
-          topologically_sorted_graph.append(node)
-    do_topological_sort(self)
+          _traverse(child, topologically_sorted_graph, visited)
+        visited.add(node)
+        topologically_sorted_graph.append(node)
+    _traverse(self, topologically_sorted_graph, visited)
 
     for node in reversed(topologically_sorted_graph):
       '''
