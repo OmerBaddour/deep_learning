@@ -197,6 +197,6 @@ class Value:
       '''
       if len(node.children) > 0:
         children_local_derivatives = node.op.backward([child.data for child in node.children])
-        zipped: list[tuple[Value, float]] = zip(node.children, children_local_derivatives)
+        zipped: list[tuple[Value, float]] = zip(node.children, children_local_derivatives, strict=True)
         for child, local_derivative in zipped:
           child.gradient += local_derivative * node.gradient

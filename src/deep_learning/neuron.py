@@ -1,7 +1,6 @@
 from src.deep_learning.op import Op
 from src.deep_learning.op import MULTIPLY
 from src.deep_learning.op import PLUS
-from src.deep_learning.op import TANH
 from src.deep_learning.value import Value
 
 class Neuron:
@@ -41,7 +40,7 @@ class Neuron:
 
     # construct graph out of Values, then call Value.forward()
     multiply_values: list[Value] = []
-    for i, (weight_value, input_value) in enumerate(zip(self.weight_values, input_values)):
+    for i, (weight_value, input_value) in enumerate(zip(self.weight_values, input_values, strict=True)):
       multiply_values.append(
           Value(
               label=f'w{i}x{i}',
@@ -63,4 +62,4 @@ class Neuron:
           children=[value]
       )
 
-    return value.forward()
+    return value

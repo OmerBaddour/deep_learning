@@ -25,16 +25,28 @@ def draw(root: Value) -> Digraph:
   return dot
 
 
+def zero_all_gradients(root: Value) -> None:
+  visited: set[Value] = set()
+  
+  def _traverse(root: Value, visited: set[Value]) -> None:
+    if root in visited:
+      return
+    root.gradient = 0.0
+    visited.add(root)
+    for child in root.children:
+      _traverse(child, visited)
+  
+  _traverse(root, visited)
+
+
 def sum_mean_squared_error(
-    outputs: list[float],
+    outputs: list[Value],
     predicted_outputs: list[Value],
 ) -> Value:
   assert len(outputs) == len(predicted_outputs)
   sum_squared_error_value = Value(0.0)
-  for output, predicted_output in zip(outputs, predicted_outputs):
-    output_value = Value(output)
-    predicted_output_value = predicted_output
-    error_value = output_value - predicted_output_value
+  for output, predicted_output in zip(outputs, predicted_outputs, strict=True):
+    error_value = output - predicted_output
     squared_error_value = error_value ** 2
     sum_squared_error_value += squared_error_value
   mean_sum_squared_error_value = sum_squared_error_value / len(predicted_outputs)
@@ -68,17 +80,18 @@ def softmax(input_values: list[Value]) -> list[Value]:
 
 
 def cross_entropy(
-    distribution: list[float | int],
+    distribution: list[Value],
     predicted_distribution: list[Value],
  ) -> Value:
   assert len(distribution) == len(predicted_distribution)
 
   terms: list[Value] = []
   epsilon = 1e-16  # adding prevents log(0) error without disturbing the distribution
-  for event, predicted_event in zip([Value(event) for event in distribution], predicted_distribution):
+  log_base = Value(2)
+  for event, predicted_event in zip(distribution, predicted_distribution, strict=True):
     event_plus_epsilon = event + epsilon
     predicted_event_plus_epsilon = predicted_event + epsilon
-    terms.append(event_plus_epsilon * Value(op=LOGARITHM, children=[predicted_event_plus_epsilon, Value(2)]))
+    terms.append(event_plus_epsilon * Value(op=LOGARITHM, children=[predicted_event_plus_epsilon, log_base]))
 
   return -Value(
       op=PLUS,

@@ -1,11 +1,27 @@
+from typing import Callable
 from src.deep_learning.value import Value
 from src.deep_learning.op import MULTIPLY
 from src.deep_learning.op import PLUS
 from src.deep_learning.util import draw
+from src.deep_learning.util import zero_all_gradients
 from src.deep_learning.util import sum_mean_squared_error
 from src.deep_learning.util import softmax
 from src.deep_learning.util import cross_entropy
 import pytest
+
+
+@pytest.fixture
+def simple_value_graph() -> Value:
+  a = Value(2, label='a')
+  b = Value(3, label='b')
+  c = Value(label='c', children=[a, b], op=PLUS)
+
+  d = Value(5, label='d')
+  e = Value(6, label='e')
+  f = Value(label='f', children=[d, e], op=MULTIPLY)
+
+  L = Value(label='L', children=[c, f], op=PLUS)
+  return L
 
 
 @pytest.fixture
@@ -16,21 +32,40 @@ def simple_value_list() -> list[Value]:
       Value(1.0, label='c'),
   ]
 
-def test_draw() -> None:
-  a = Value(2, label='a')
-  b = Value(3, label='b')
-  c = Value(label='c', children=[a, b], op=PLUS)
+def test_draw(simple_value_graph: Value) -> None:
+  draw(simple_value_graph)
 
-  d = Value(5, label='d')
-  e = Value(6, label='e')
-  f = Value(label='f', children=[d, e], op=MULTIPLY)
 
-  L = Value(label='L', children=[c, f], op=PLUS)
-  draw(L)
+def test_zero_all_gradients(simple_value_graph: Value) -> None:
+  simple_value_graph.forward()
+  simple_value_graph.gradient = 1.0
+  simple_value_graph.backward()
+  
+  visited: set[Value] = set()
+  def _assert_gradient_condition(root: Value, condition: Callable[[Value], bool], visited: set[Value]) -> None:
+    if root in visited:
+      return
+    assert condition(root)
+    visited.add(root)
+    for child in root.children:
+      _assert_gradient_condition(child, condition, visited)
+  
+  def gradient_is_set(value: Value) -> bool:
+    return value.gradient != 0.0
+  
+  _assert_gradient_condition(simple_value_graph, gradient_is_set, visited)
+
+  zero_all_gradients(simple_value_graph)
+
+  def gradient_is_unset(value: Value) -> bool:
+    return value.gradient == 0.0
+  
+  visited: set[Value] = set()
+  _assert_gradient_condition(simple_value_graph, gradient_is_unset, visited)
 
 
 def test_sum_mean_squared_error(simple_value_list: list[Value]) -> None:
-  outputs = [value.data + 1 for value in simple_value_list]
+  outputs = [Value(value.data + 1) for value in simple_value_list]
   predicted_outputs = simple_value_list
   error_value = sum_mean_squared_error(
       outputs,
@@ -63,7 +98,7 @@ def test_cross_entropy(simple_value_list: list[Value]) -> None:
     value.forward()
 
   self_cross_entropy = cross_entropy(
-      distribution=[value.data for value in distribution],
+      distribution=distribution,
       predicted_distribution=distribution,
   )
   self_cross_entropy.forward()
@@ -72,9 +107,9 @@ def test_cross_entropy(simple_value_list: list[Value]) -> None:
   for value in other_distribution:
     value.forward()
   other_cross_entropy = cross_entropy(
-      distribution=[value.data for value in distribution],
+      distribution=distribution,
       predicted_distribution=other_distribution,
   )
   other_cross_entropy.forward()
-  
+
   assert self_cross_entropy.data < other_cross_entropy.data

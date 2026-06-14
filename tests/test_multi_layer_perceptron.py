@@ -12,7 +12,7 @@ def mse_loss(
 ) -> Value:
   '''Mean squared error over a dataset, as a Value graph (single-output MLP).'''
   sum_squared_difference = Value(0.0)
-  for input_row, target_row in zip(inputs, targets):
+  for input_row, target_row in zip(inputs, targets, strict=True):
     predicted = multi_layer_perceptron.build_graph(input_row)[0]
     difference = Value(target_row[0]) + (predicted * -1)
     sum_squared_difference += difference ** 2
