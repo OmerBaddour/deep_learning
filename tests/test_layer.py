@@ -4,7 +4,7 @@ import random
 import pytest
 
 from src.deep_learning.layer import Layer
-from src.deep_learning.layer import get_random_layer
+from src.deep_learning.layer import get_layer
 from src.deep_learning.neuron import Neuron
 from src.deep_learning.op import TANH
 from src.deep_learning.value import Value
@@ -104,7 +104,7 @@ def test_accepts_value_inputs(simple_layer: Layer):
 # --- get_random_layer ---
 
 def test_random_layer_dimensions():
-  layer = get_random_layer(num_neurons=4, num_weights_per_neuron=5)
+  layer = get_layer(num_neurons=4, num_weights_per_neuron=5)
   assert isinstance(layer, Layer)
   assert len(layer.neurons) == 4
   assert layer.num_neuron_weights == 5
@@ -112,15 +112,15 @@ def test_random_layer_dimensions():
 
 
 def test_random_layer_biases_zero():
-  layer = get_random_layer(num_neurons=3, num_weights_per_neuron=4)
+  layer = get_layer(num_neurons=3, num_weights_per_neuron=4)
   assert all(n.bias == 0.0 for n in layer.neurons)
 
 
 def test_random_layer_is_deterministic_under_seed():
   random.seed(0)
-  a = get_random_layer(num_neurons=2, num_weights_per_neuron=3)
+  a = get_layer(num_neurons=2, num_weights_per_neuron=3)
   random.seed(0)
-  b = get_random_layer(num_neurons=2, num_weights_per_neuron=3)
+  b = get_layer(num_neurons=2, num_weights_per_neuron=3)
   a_weights = [n.weights for n in a.neurons]
   b_weights = [n.weights for n in b.neurons]
   assert a_weights == b_weights

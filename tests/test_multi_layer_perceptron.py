@@ -1,5 +1,5 @@
 import random
-from src.deep_learning.layer import get_random_layer
+from src.deep_learning.layer import get_layer
 from src.deep_learning.multi_layer_perceptron import MultiLayerPerceptron
 from src.deep_learning.op import TANH
 from src.deep_learning.value import Value
@@ -56,9 +56,9 @@ def test_mse_loss_decreases_with_gradient_descent():
   random.seed(0)
   multi_layer_perceptron = MultiLayerPerceptron(
       layers=[
-          get_random_layer(4, 3, TANH),
-          get_random_layer(4, 4, TANH),
-          get_random_layer(1, 4, TANH),
+          get_layer(4, 3, TANH),
+          get_layer(4, 4, TANH),
+          get_layer(1, 4, TANH),
       ],
   )
 

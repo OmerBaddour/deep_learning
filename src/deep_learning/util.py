@@ -1,3 +1,4 @@
+import random
 from src.deep_learning.value import Value
 import math
 from src.deep_learning.op import DIVIDE
@@ -8,6 +9,9 @@ from graphviz import Digraph
 
 
 def draw(root: Value) -> Digraph:
+  '''
+  Draw graph of Value nodes
+  '''
   dot = Digraph(graph_attr={'rankdir': 'LR'})
   seen = set()
   def build(v: Value):
@@ -25,7 +29,25 @@ def draw(root: Value) -> Digraph:
   return dot
 
 
+def random_uniform(lower: float, upper: float) -> float:
+  '''
+  Random uniform float between specified bounds
+  '''
+  return random.uniform(lower, upper)
+
+
+def xavier_uniform(num_inputs: float, num_outputs: float) -> float:
+  '''
+  Xavier uniform float given num_inputs and num_outputs
+  '''
+  bound = math.sqrt(6.0 / (num_inputs + num_outputs))
+  return random_uniform(-bound, bound)
+
+
 def zero_all_gradients(root: Value) -> None:
+  '''
+  Zero all gradients of all Values recursing from the root
+  '''
   visited: set[Value] = set()
   
   def _traverse(root: Value, visited: set[Value]) -> None:
@@ -43,6 +65,9 @@ def sum_mean_squared_error(
     outputs: list[Value],
     predicted_outputs: list[Value],
 ) -> Value:
+  '''
+  Build Value graph for sum mean squared error
+  '''
   assert len(outputs) == len(predicted_outputs)
   sum_squared_error_value = Value(0.0)
   for output, predicted_output in zip(outputs, predicted_outputs, strict=True):
@@ -54,6 +79,9 @@ def sum_mean_squared_error(
 
 
 def softmax(input_values: list[Value]) -> list[Value]:
+  '''
+  Build Value graph for softmax
+  '''
   softmax_numerators: list[Value] = []
   softmax_layer: list[Value] = []
   e_value = Value(math.e, label='e')
@@ -83,6 +111,9 @@ def cross_entropy(
     distribution: list[Value],
     predicted_distribution: list[Value],
  ) -> Value:
+  '''
+  Build Value graph for cross entropy
+  '''
   assert len(distribution) == len(predicted_distribution)
 
   terms: list[Value] = []
