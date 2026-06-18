@@ -30,11 +30,15 @@ class Layer:
     return outputs
 
 def get_layer(
-    num_neurons: int,
     num_weights_per_neuron: int,
+    num_neurons: int,
     activation: Op | None = None,
     fn_weight_initializer: Callable[[], float] | None = None
 ) -> Layer:
+  '''
+  num_weights_per_neuron is the number of *inputs* per neuron
+  num_neurons is the number of *outputs* of the layer
+  '''
   default_fn_weight_initializer = lambda: random_uniform(-1, 1)
   fn_weight_initializer = fn_weight_initializer or default_fn_weight_initializer
 

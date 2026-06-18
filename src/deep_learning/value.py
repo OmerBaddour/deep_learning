@@ -1,6 +1,7 @@
 from __future__ import annotations
 from typing import Any
 from src.deep_learning.op import Op
+from src.deep_learning.op import Power
 from src.deep_learning.op import DIVIDE
 from src.deep_learning.op import EXPONENTIATE
 from src.deep_learning.op import PLUS
@@ -126,18 +127,18 @@ class Value:
     return self * -1
 
   def __pow__(self, other: float | int | Value) -> Value:
-    other_value = None
     if isinstance(other, Value):
-      other_value = other
+      return Value(
+          op=EXPONENTIATE,
+          children=[self, other],
+      )
     elif _is_numeric(other):
-      other_value = Value(data=float(other))
-    if other_value is None:
+      return Value(
+          op=Power(exponent=other),
+          children=[self],
+      )
+    else:
       return NotImplemented
-
-    return Value(
-        op=EXPONENTIATE,
-        children=[self, other_value]
-    )
   
   def forward(self) -> Value:
     visited: set[Value] = set()

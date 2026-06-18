@@ -78,6 +78,8 @@ def test_zero_input_yields_tanh_of_bias(simple_layer: Layer):
 
 def test_known_dot_products(simple_layer: Layer):
   outputs = simple_layer.build_graph([1.0, 2.0, 3.0])
+  for output in outputs:
+    output.forward()
   assert data(outputs) == pytest.approx([
       TANH.forward([1 + 4 + 9 + 5.0]),    # 19
       TANH.forward([3 + 2 + 6 + 6.0]),    # 17
@@ -89,22 +91,29 @@ def test_outputs_are_bounded_by_tanh_range(simple_layer: Layer):
   # Example of the saturated regime training wants to AVOID (gradients ~0),
   # here just to confirm tanh saturates rather than overflowing.
   outputs = simple_layer.build_graph([1e6, 1e6, 1e6])
-  for o in outputs:
-    assert -1.0 <= o.data <= 1.0
-    assert o.data == pytest.approx(1.0)  # all weights positive -> +1
+  for output in outputs:
+    output.forward()
+    assert -1.0 <= output.data <= 1.0
+    assert output.data == pytest.approx(1.0)  # all weights positive -> +1
 
 
 def test_accepts_value_inputs(simple_layer: Layer):
   # forward should treat raw floats and Value inputs identically
   floats = simple_layer.build_graph([1.0, 2.0, 3.0])
+  for output in floats:
+    output.forward()
+
   values = simple_layer.build_graph([Value(1.0), Value(2.0), Value(3.0)])
+  for output in values:
+    output.forward()
+
   assert data(values) == pytest.approx(data(floats))
 
 
 # --- get_random_layer ---
 
 def test_random_layer_dimensions():
-  layer = get_layer(num_neurons=4, num_weights_per_neuron=5)
+  layer = get_layer(num_weights_per_neuron=5, num_neurons=4)
   assert isinstance(layer, Layer)
   assert len(layer.neurons) == 4
   assert layer.num_neuron_weights == 5
@@ -112,15 +121,15 @@ def test_random_layer_dimensions():
 
 
 def test_random_layer_biases_zero():
-  layer = get_layer(num_neurons=3, num_weights_per_neuron=4)
+  layer = get_layer(num_weights_per_neuron=4, num_neurons=3)
   assert all(n.bias == 0.0 for n in layer.neurons)
 
 
 def test_random_layer_is_deterministic_under_seed():
   random.seed(0)
-  a = get_layer(num_neurons=2, num_weights_per_neuron=3)
+  a = get_layer(num_weights_per_neuron=3, num_neurons=2)
   random.seed(0)
-  b = get_layer(num_neurons=2, num_weights_per_neuron=3)
+  b = get_layer(num_weights_per_neuron=3, num_neurons=2)
   a_weights = [n.weights for n in a.neurons]
   b_weights = [n.weights for n in b.neurons]
   assert a_weights == b_weights

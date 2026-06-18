@@ -87,7 +87,32 @@ class Multiply(Op):
     return [before * after for (before, after) in zip(product_before, product_after, strict=True)]
 
 
+class Power(Op):
+  '''
+  Raise a variable to a constant power
+  '''
+
+  arity = 1
+
+  def __init__(self, exponent: float | int):
+    self.exponent = exponent
+
+  def to_string(self) -> str:
+    return 'power'
+  
+  def forward(self, inputs: list[float]) -> float:
+    assert len(inputs) == self.arity
+    return inputs[0] ** self.exponent
+  
+  def backward(self, inputs: list[float]) -> list[float]:
+    assert len(inputs) == self.arity
+    return [self.exponent * Power(self.exponent - 1).forward([inputs[0]])]
+
+
 class Exponentiate(Op):
+  '''
+  Raise a variable to a variable power
+  '''
 
   arity = 2
 

@@ -1,11 +1,17 @@
 from src.deep_learning.op import DIVIDE
+from src.deep_learning.op import Power
 from src.deep_learning.op import MULTIPLY
 from src.deep_learning.op import Op
 import pytest
 
 
 def _all_ops() -> list[Op]:
-  return [subclass() for subclass in Op.__subclasses__()]
+  all_ops: list[Op] = []
+  # add those with __init__() parameters
+  all_ops.extend([Power(2)])
+  # add others
+  all_ops.extend([subclass() for subclass in Op.__subclasses__() if subclass != Power])
+  return all_ops
 
 
 @pytest.mark.parametrize('op', _all_ops(), ids=lambda op: op.to_string())

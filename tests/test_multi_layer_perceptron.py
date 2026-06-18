@@ -56,9 +56,21 @@ def test_mse_loss_decreases_with_gradient_descent():
   random.seed(0)
   multi_layer_perceptron = MultiLayerPerceptron(
       layers=[
-          get_layer(4, 3, TANH),
-          get_layer(4, 4, TANH),
-          get_layer(1, 4, TANH),
+          get_layer(
+              num_weights_per_neuron=3,
+              num_neurons=4,
+              activation=TANH,
+          ),
+          get_layer(
+              num_weights_per_neuron=4,
+              num_neurons=4,
+              activation=TANH,
+          ),
+          get_layer(
+              num_weights_per_neuron=4,
+              num_neurons=1,
+              activation=TANH,
+          ),
       ],
   )
 
