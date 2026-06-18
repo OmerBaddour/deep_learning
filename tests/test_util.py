@@ -4,7 +4,7 @@ from src.deep_learning.op import MULTIPLY
 from src.deep_learning.op import PLUS
 from src.deep_learning.util import draw
 from src.deep_learning.util import zero_all_gradients
-from src.deep_learning.util import sum_mean_squared_error
+from src.deep_learning.util import mean_squared_error
 from src.deep_learning.util import softmax
 from src.deep_learning.util import cross_entropy
 import pytest
@@ -67,7 +67,7 @@ def test_zero_all_gradients(simple_value_graph: Value) -> None:
 def test_sum_mean_squared_error(simple_value_list: list[Value]) -> None:
   outputs = [Value(value.data + 1) for value in simple_value_list]
   predicted_outputs = simple_value_list
-  error_value = sum_mean_squared_error(
+  error_value = mean_squared_error(
       outputs,
       predicted_outputs,
   )

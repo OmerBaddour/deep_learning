@@ -61,12 +61,12 @@ def zero_all_gradients(root: Value) -> None:
   _traverse(root, visited)
 
 
-def sum_mean_squared_error(
+def mean_squared_error(
     outputs: list[Value],
     predicted_outputs: list[Value],
 ) -> Value:
   '''
-  Build Value graph for sum mean squared error
+  Build Value graph for mean squared error
   '''
   assert len(outputs) == len(predicted_outputs)
   sum_squared_error_value = Value(0.0)

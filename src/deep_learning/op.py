@@ -98,7 +98,7 @@ class Power(Op):
     self.exponent = exponent
 
   def to_string(self) -> str:
-    return 'power'
+    return f'power({self.exponent})'
   
   def forward(self, inputs: list[float]) -> float:
     assert len(inputs) == self.arity
