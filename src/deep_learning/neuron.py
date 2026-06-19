@@ -1,6 +1,6 @@
+from src.deep_learning.op import Op
 from src.deep_learning.op import MULTIPLY
 from src.deep_learning.op import PLUS
-from src.deep_learning.op import TANH
 from src.deep_learning.value import Value
 
 class Neuron:
@@ -8,6 +8,7 @@ class Neuron:
       self,
       weights: list[float],
       bias: float,
+      activation: Op | None = None,
   ):
     self.weights = weights
     assert len(self.weights) > 0
@@ -18,7 +19,9 @@ class Neuron:
       self.weight_values.append(Value(weight, label=f'w{i}'))
     self.bias_value = Value(self.bias, label='b')
 
-  def forward(
+    self.activation = activation
+
+  def build_graph(
       self,
       inputs: list[float | Value],
   ) -> Value:
@@ -37,7 +40,7 @@ class Neuron:
 
     # construct graph out of Values, then call Value.forward()
     multiply_values: list[Value] = []
-    for i, (weight_value, input_value) in enumerate(zip(self.weight_values, input_values)):
+    for i, (weight_value, input_value) in enumerate(zip(self.weight_values, input_values, strict=True)):
       multiply_values.append(
           Value(
               label=f'w{i}x{i}',
@@ -46,16 +49,17 @@ class Neuron:
           ),
       )
 
-    sum_value = Value(
+    value = Value(
         label='sum',
         op=PLUS,
         children=multiply_values + [self.bias_value],
     )
 
-    tanh_value = Value(
-        label='tanh',
-        op=TANH,
-        children=[sum_value]
-    )
+    if self.activation is not None:
+      value = Value(
+          label=self.activation.to_string(),
+          op=self.activation,
+          children=[value]
+      )
 
-    return tanh_value.forward()
+    return value

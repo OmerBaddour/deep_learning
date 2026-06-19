@@ -1,6 +1,7 @@
 import random
-from src.deep_learning.layer import get_random_layer
+from src.deep_learning.layer import get_layer
 from src.deep_learning.multi_layer_perceptron import MultiLayerPerceptron
+from src.deep_learning.op import TANH
 from src.deep_learning.value import Value
 
 
@@ -11,8 +12,8 @@ def mse_loss(
 ) -> Value:
   '''Mean squared error over a dataset, as a Value graph (single-output MLP).'''
   sum_squared_difference = Value(0.0)
-  for input_row, target_row in zip(inputs, targets):
-    predicted = multi_layer_perceptron.forward(input_row)[0]
+  for input_row, target_row in zip(inputs, targets, strict=True):
+    predicted = multi_layer_perceptron.build_graph(input_row)[0]
     difference = Value(target_row[0]) + (predicted * -1)
     sum_squared_difference += difference ** 2
   loss = sum_squared_difference * (1 / len(inputs))
@@ -28,6 +29,7 @@ def gradient_descent_step(
 ) -> float:
   '''One full-batch step: returns the loss BEFORE the parameter update.'''
   loss = mse_loss(multi_layer_perceptron, inputs, targets)
+  loss.forward()
 
   # zero gradients
   for layer in multi_layer_perceptron.layers:
@@ -54,9 +56,21 @@ def test_mse_loss_decreases_with_gradient_descent():
   random.seed(0)
   multi_layer_perceptron = MultiLayerPerceptron(
       layers=[
-          get_random_layer(4, 3),
-          get_random_layer(4, 4),
-          get_random_layer(1, 4),
+          get_layer(
+              num_weights_per_neuron=3,
+              num_neurons=4,
+              activation=TANH,
+          ),
+          get_layer(
+              num_weights_per_neuron=4,
+              num_neurons=4,
+              activation=TANH,
+          ),
+          get_layer(
+              num_weights_per_neuron=4,
+              num_neurons=1,
+              activation=TANH,
+          ),
       ],
   )
 

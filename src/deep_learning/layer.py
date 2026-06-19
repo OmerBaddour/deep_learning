@@ -1,7 +1,9 @@
-import math
+from typing import Callable
 import random
 from src.deep_learning.neuron import Neuron
+from src.deep_learning.op import Op
 from src.deep_learning.value import Value
+from src.deep_learning.util import random_uniform
 
 class Layer:
   def __init__(
@@ -16,7 +18,7 @@ class Layer:
     for neuron in self.neurons:
       assert len(neuron.weights) == self.num_neuron_weights
   
-  def forward(
+  def build_graph(
       self,
       inputs: list[float | Value],
   ) -> list[Value]:
@@ -24,20 +26,29 @@ class Layer:
 
     outputs: list[Value] = []
     for neuron in self.neurons:
-      outputs.append(neuron.forward(inputs))
+      outputs.append(neuron.build_graph(inputs))
     return outputs
 
-def get_random_layer(
-    num_neurons: int,
+def get_layer(
     num_weights_per_neuron: int,
+    num_neurons: int,
+    activation: Op | None = None,
+    fn_weight_initializer: Callable[[], float] | None = None
 ) -> Layer:
-  std = math.sqrt(1 / num_weights_per_neuron)  # Xavier, suited to tanh
+  '''
+  num_weights_per_neuron is the number of *inputs* per neuron
+  num_neurons is the number of *outputs* of the layer
+  '''
+  default_fn_weight_initializer = lambda: random_uniform(-1, 1)
+  fn_weight_initializer = fn_weight_initializer or default_fn_weight_initializer
+
   neurons: list[Neuron] = []
   for _ in range(num_neurons):
     neurons.append(
         Neuron(
-            weights=[random.gauss(0, std) for _ in range(num_weights_per_neuron)],
+            weights=[fn_weight_initializer() for _ in range(num_weights_per_neuron)],
             bias=0.0,
+            activation=activation,
         )
     )
   return Layer(neurons)

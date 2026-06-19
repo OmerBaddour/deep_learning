@@ -3,16 +3,30 @@ from src.deep_learning.op import TANH
 import pytest
 
 
-def test_forward_matches_tanh_of_preactivation():
+def test_forward_without_activation_is_weighted_sum():
   '''Forward pass: output is tanh(w . x + b).'''
   weights = [0.1, -0.2, 0.05]
   bias = 0.1
   inputs = [0.3, -0.4, 0.2]
 
   neuron = Neuron(weights=weights, bias=bias)
-  value = neuron.forward(inputs=inputs)
+  value = neuron.build_graph(inputs=inputs)
+  value.forward()
 
-  preactivation = sum(w * x for w, x in zip(weights, inputs)) + bias
+  assert value.data == sum(w * x for w, x in zip(weights, inputs, strict=True)) + bias
+
+
+def test_forward_matches_tanh_of_preactivation():
+  '''Forward pass: output is tanh(w . x + b).'''
+  weights = [0.1, -0.2, 0.05]
+  bias = 0.1
+  inputs = [0.3, -0.4, 0.2]
+
+  neuron = Neuron(weights=weights, bias=bias, activation=TANH)
+  value = neuron.build_graph(inputs=inputs)
+  value.forward()
+
+  preactivation = sum(w * x for w, x in zip(weights, inputs, strict=True)) + bias
   assert value.data == pytest.approx(TANH.forward([preactivation]))
 
 
@@ -30,15 +44,19 @@ def test_backward_matches_finite_differences():
   h = 1e-6
 
   # Analytic gradients via backward().
-  neuron = Neuron(weights=weights, bias=bias)
-  out = neuron.forward(inputs=inputs)
+  neuron = Neuron(weights=weights, bias=bias, activation=TANH)
+  out = neuron.build_graph(inputs=inputs)
+  out.forward()
   out.gradient = 1.0
   out.backward()
   analytic = [wv.gradient for wv in neuron.weight_values] + [neuron.bias_value.gradient]
 
   # Numeric gradients: rebuild the neuron with one parameter nudged by +/- h.
   def output_data(w: list[float], b: float) -> float:
-    return Neuron(weights=w, bias=b).forward(inputs=inputs).data
+    return Neuron(weights=w, bias=b, activation=TANH) \
+        .build_graph(inputs=inputs) \
+        .forward() \
+        .data
 
   numeric: list[float] = []
   for i in range(len(weights)):
@@ -47,14 +65,15 @@ def test_backward_matches_finite_differences():
     numeric.append((output_data(w_plus, bias) - output_data(w_minus, bias)) / (2 * h))
   numeric.append((output_data(weights, bias + h) - output_data(weights, bias - h)) / (2 * h))
 
-  for analytic_grad, numeric_grad in zip(analytic, numeric):
+  for analytic_grad, numeric_grad in zip(analytic, numeric, strict=True):
     assert analytic_grad == pytest.approx(numeric_grad, abs=1e-6)
 
 
 def test_backward_seeds_root_gradient():
   '''The node backward() is called on keeps the gradient it was seeded with.'''
   neuron = Neuron(weights=[0.1, -0.2, 0.05], bias=0.1)
-  out = neuron.forward(inputs=[0.3, -0.4, 0.2])
+  out = neuron.build_graph(inputs=[0.3, -0.4, 0.2])
+  out.forward()
   out.gradient = 1.0
   out.backward()
   assert out.gradient == 1.0

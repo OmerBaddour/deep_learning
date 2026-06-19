@@ -12,7 +12,7 @@ class MultiLayerPerceptron:
     for i in range(0, len(self.layers) - 1):
       assert len(self.layers[i].neurons) == len(self.layers[i+1].neurons[0].weights), f'{len(self.layers[i].neurons)=} {len(self.layers[i+1].neurons[0].weights)=}'
 
-  def forward(
+  def build_graph(
       self,
       inputs: list[float | Value],
   ) -> list[Value]:
@@ -20,5 +20,5 @@ class MultiLayerPerceptron:
 
     current_input: list[float | Value] = inputs
     for i in range(0, len(self.layers) - 1):
-      current_input = self.layers[i].forward(current_input)
-    return self.layers[-1].forward(current_input)
+      current_input = self.layers[i].build_graph(current_input)
+    return self.layers[-1].build_graph(current_input)

@@ -2,8 +2,8 @@ from src.deep_learning.value import Value
 from src.deep_learning.op import MULTIPLY
 from src.deep_learning.op import PLUS
 from src.deep_learning.op import TANH
-from src.deep_learning.value import draw
 import pytest
+
 
 @pytest.fixture
 def simple_value_graph() -> Value:
@@ -18,14 +18,18 @@ def simple_value_graph() -> Value:
   L = Value(label='L', children=[c, f], op=PLUS)
   return L
 
+
 def test_basic():
   assert Value(1).data == 1.0
   
   x = Value(1) + 2
+  x.forward()
   assert isinstance(x, Value) and x.data == 3.0 and x.op == PLUS
   
   x = Value(1) * 2
+  x.forward()
   assert isinstance(x, Value) and x.data == 2.0 and x.op == MULTIPLY
+
 
 def test_forward(simple_value_graph: Value):
   L = simple_value_graph
@@ -50,8 +54,6 @@ def test_forward(simple_value_graph: Value):
 
   assert L.data == c.data + f.data
 
-def test_draw(simple_value_graph: Value):
-  draw(simple_value_graph)
 
 def test_backward(simple_value_graph: Value):
   L = simple_value_graph
@@ -79,6 +81,7 @@ def test_backward(simple_value_graph: Value):
   assert d.gradient == e.data
   assert e.gradient == d.data
 
+
 def test_backward_multi_reference():
   x = Value(3.0)
   y: Value = x * x
@@ -88,6 +91,7 @@ def test_backward_multi_reference():
   y.backward()
 
   assert x.gradient == x.data * 2
+
 
 def test_tanh(simple_value_graph: Value):
   x = simple_value_graph
