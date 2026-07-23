@@ -1,5 +1,4 @@
 from typing import Callable
-import random
 from src.deep_learning.neuron import Neuron
 from src.deep_learning.op import Op
 from src.deep_learning.value import Value
