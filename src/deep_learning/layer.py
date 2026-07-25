@@ -1,8 +1,8 @@
 from typing import Callable
-from src.deep_learning.neuron import Neuron
-from src.deep_learning.op import Op
-from src.deep_learning.value import Value
-from src.deep_learning.util import random_uniform
+from deep_learning.neuron import Neuron
+from deep_learning.op import Op
+from deep_learning.value import Value
+from deep_learning.util import random_uniform
 
 class Layer:
   def __init__(

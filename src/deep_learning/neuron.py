@@ -1,7 +1,7 @@
-from src.deep_learning.op import Op
-from src.deep_learning.op import MULTIPLY
-from src.deep_learning.op import PLUS
-from src.deep_learning.value import Value
+from deep_learning.op import Op
+from deep_learning.op import MULTIPLY
+from deep_learning.op import PLUS
+from deep_learning.value import Value
 
 class Neuron:
   def __init__(
@@ -38,7 +38,7 @@ class Neuron:
       else:
         raise TypeError('Unsupported type')
 
-    # construct graph out of Values, then call Value.forward()
+    # construct graph out of Values
     multiply_values: list[Value] = []
     for i, (weight_value, input_value) in enumerate(zip(self.weight_values, input_values, strict=True)):
       multiply_values.append(
