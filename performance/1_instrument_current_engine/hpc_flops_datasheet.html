@@ -1,0 +1,731 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>The HPC peak-FLOP/s equation, factor by factor</title>
+<style>
+  :root {
+    --ink: #0e1116;
+    --paper: #f5f7fa;
+    --card: #ffffff;
+    --line: #d3dae3;
+    --muted: #5c6672;
+    --text: #1c232b;
+    --accent: #0f9e8f;       /* teal — general structure / control plane */
+    --accent-soft: #dff3f0;
+    --signal: #b6791f;       /* amber — this specific chip / the FMA hot path */
+    --signal-soft: #f7ecd6;
+    --dim: #eef1f5;          /* inert block fill in the datapath */
+    --shadow: 0 1px 2px rgba(16,24,32,.06), 0 6px 20px rgba(16,24,32,.05);
+    --mono: ui-monospace, "SF Mono", "SFMono-Regular", "Menlo", "Cascadia Mono", "Roboto Mono", monospace;
+    --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ink: #e8edf3; --paper: #0c0f14; --card: #141922; --line: #262d38;
+      --muted: #8b96a4; --text: #d3dae3; --accent: #34c9b8; --accent-soft: #10312e;
+      --signal: #e0a44a; --signal-soft: #2c2411; --dim: #171d27;
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 26px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="light"] {
+    --ink: #0e1116; --paper: #f5f7fa; --card: #ffffff; --line: #d3dae3;
+    --muted: #5c6672; --text: #1c232b; --accent: #0f9e8f; --accent-soft: #dff3f0;
+    --signal: #b6791f; --signal-soft: #f7ecd6; --dim: #eef1f5;
+    --shadow: 0 1px 2px rgba(16,24,32,.06), 0 6px 20px rgba(16,24,32,.05);
+  }
+  :root[data-theme="dark"] {
+    --ink: #e8edf3; --paper: #0c0f14; --card: #141922; --line: #262d38;
+    --muted: #8b96a4; --text: #d3dae3; --accent: #34c9b8; --accent-soft: #10312e;
+    --signal: #e0a44a; --signal-soft: #2c2411; --dim: #171d27;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 26px rgba(0,0,0,.35);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--paper); color: var(--text);
+    font-family: var(--sans); line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 62rem; margin: 0 auto; padding: clamp(1.5rem, 4vw, 4rem) clamp(1.1rem, 4vw, 2.5rem) 5rem; }
+
+  .eyebrow {
+    font-family: var(--mono); font-size: .72rem; letter-spacing: .18em;
+    text-transform: uppercase; color: var(--accent); margin: 0 0 .9rem;
+    display: flex; align-items: center; gap: .6rem;
+  }
+  .eyebrow::before { content: ""; width: 1.6rem; height: 2px; background: var(--accent); }
+  h1 {
+    font-family: var(--mono); font-weight: 600; color: var(--ink);
+    font-size: clamp(1.6rem, 4.6vw, 2.5rem); line-height: 1.12;
+    letter-spacing: -.01em; text-wrap: balance; margin: 0 0 .8rem;
+  }
+  .lede { font-size: 1.06rem; color: var(--muted); max-width: 42rem; margin: 0; }
+  .lede b { color: var(--text); font-weight: 600; }
+
+  hr.rule { border: 0; border-top: 1px solid var(--line); margin: 2.6rem 0; }
+
+  h2 {
+    font-family: var(--mono); font-weight: 600; color: var(--ink);
+    font-size: 1.28rem; letter-spacing: -.01em; margin: 0 0 1rem;
+    display: flex; align-items: baseline; gap: .7rem;
+  }
+  h2 .n {
+    font-size: .8rem; color: var(--accent); border: 1px solid var(--accent);
+    border-radius: 4px; padding: .05rem .4rem; letter-spacing: .05em;
+  }
+  h3 { font-family: var(--mono); font-weight: 600; color: var(--ink); font-size: 1rem; margin: 1.8rem 0 .7rem; }
+  p { margin: 0 0 1rem; }
+  .section > p:last-child { margin-bottom: 0; }
+  a { color: var(--accent); text-underline-offset: 2px; }
+
+  /* ---- tabs ---- */
+  .tabs {
+    position: sticky; top: 0; z-index: 5; margin: 1.6rem 0 2.2rem;
+    display: flex; gap: .3rem; flex-wrap: wrap;
+    background: var(--paper); padding: .5rem 0; border-bottom: 1px solid var(--line);
+  }
+  .tab {
+    font-family: var(--mono); font-size: .82rem; font-weight: 600;
+    color: var(--muted); background: transparent; border: 1px solid transparent;
+    border-radius: 8px; padding: .5rem .85rem; cursor: pointer; line-height: 1.2;
+    display: flex; align-items: center; gap: .5rem;
+  }
+  .tab .tnum { font-size: .68rem; color: var(--accent); }
+  .tab:hover { color: var(--text); background: var(--card); }
+  .tab[aria-selected="true"] {
+    color: var(--ink); background: var(--card); border-color: var(--line); box-shadow: var(--shadow);
+  }
+  .tab[aria-selected="true"] .tnum { color: var(--signal); }
+  .panel { display: none; }
+  .panel.active { display: block; animation: fade .25s ease; }
+  @keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+  /* ---- the equation chain ---- */
+  .chain-scroll { overflow-x: auto; padding: .3rem .1rem 1rem; margin: 0 -.1rem; }
+  .chain { display: flex; align-items: stretch; gap: .5rem; min-width: max-content; }
+  .factor {
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    box-shadow: var(--shadow); padding: .8rem .85rem; min-width: 8.2rem;
+    display: flex; flex-direction: column; gap: .3rem; border-top: 3px solid var(--accent);
+  }
+  .factor.result { border-top-color: var(--signal); background: var(--signal-soft); }
+  .factor .fname { font-family: var(--mono); font-size: .82rem; font-weight: 600; color: var(--ink); }
+  .factor .funit { font-family: var(--mono); font-size: .68rem; color: var(--accent); letter-spacing: .02em; word-break: break-word; }
+  .factor.result .funit { color: var(--signal); }
+  .factor .fnote { font-size: .72rem; color: var(--muted); line-height: 1.35; }
+  .op { display: flex; align-items: center; font-family: var(--mono); font-size: 1.3rem; color: var(--muted); padding: 0 .1rem; align-self: center; }
+
+  .cancel-note {
+    font-family: var(--mono); font-size: .8rem; color: var(--muted);
+    background: var(--accent-soft); border-radius: 8px; padding: .8rem 1rem;
+    margin-top: .3rem; line-height: 1.7;
+  }
+  .cancel-note .strike { text-decoration: line-through; opacity: .55; }
+  .cancel-note b { color: var(--accent); }
+
+  /* ---- worked example ---- */
+  .spec { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; box-shadow: var(--shadow); background: var(--card); }
+  .spec-head {
+    background: var(--signal-soft); border-bottom: 1px solid var(--line);
+    padding: .7rem 1rem; font-family: var(--mono); font-size: .82rem;
+    color: var(--signal); letter-spacing: .04em; display: flex;
+    justify-content: space-between; gap: 1rem; flex-wrap: wrap;
+  }
+  .spec-head b { color: var(--ink); font-weight: 600; }
+  table.calc { width: 100%; border-collapse: collapse; font-size: .9rem; }
+  table.calc td, table.calc th { padding: .6rem 1rem; text-align: left; border-bottom: 1px solid var(--line); }
+  table.calc th { font-family: var(--mono); font-size: .7rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 500; }
+  table.calc td.factor-name { color: var(--text); }
+  table.calc td.val { font-family: var(--mono); color: var(--ink); font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  table.calc td.why { color: var(--muted); font-size: .82rem; }
+  table.calc tr:last-child td { border-bottom: 0; }
+  table.calc tr.total td { background: var(--signal-soft); }
+  table.calc tr.total td.val { color: var(--signal); font-size: 1rem; }
+  table.calc tr.sub td.factor-name { padding-left: 2rem; color: var(--muted); font-size: .84rem; }
+
+  /* ---- FLOPs/cycle unpack ---- */
+  .unpack { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: .7rem; margin: 0 0 1rem; }
+  .u-card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: .85rem .9rem; box-shadow: var(--shadow); }
+  .u-card .uv { font-family: var(--mono); font-size: 1.5rem; font-weight: 600; color: var(--signal); line-height: 1; }
+  .u-card .ul { font-family: var(--mono); font-size: .74rem; color: var(--ink); margin: .45rem 0 .3rem; font-weight: 600; }
+  .u-card .ud { font-size: .76rem; color: var(--muted); line-height: 1.4; }
+
+  /* ---- Q&A ---- */
+  .qa { display: flex; flex-direction: column; gap: .8rem; }
+  details.q { border: 1px solid var(--line); border-radius: 10px; background: var(--card); box-shadow: var(--shadow); overflow: hidden; }
+  details.q > summary {
+    cursor: pointer; list-style: none; padding: .95rem 1.1rem;
+    font-family: var(--mono); font-size: .92rem; color: var(--ink); font-weight: 600;
+    display: flex; align-items: center; gap: .75rem;
+  }
+  details.q > summary::-webkit-details-marker { display: none; }
+  details.q > summary::before { content: "+"; font-family: var(--mono); color: var(--accent); font-size: 1.1rem; width: 1rem; text-align: center; transition: transform .2s ease; }
+  details.q[open] > summary::before { content: "\2212"; }
+  details.q .body { padding: 0 1.1rem 1.1rem; }
+  details.q .body p { margin: 0 0 .7rem; }
+  details.q .body p:last-child { margin: 0; }
+  .verdict { display: inline-block; font-family: var(--mono); font-size: .68rem; letter-spacing: .06em; text-transform: uppercase; padding: .12rem .5rem; border-radius: 999px; margin-left: auto; white-space: nowrap; }
+  .verdict.yes { background: var(--accent-soft); color: var(--accent); }
+  .verdict.no  { background: var(--signal-soft); color: var(--signal); }
+  code { font-family: var(--mono); font-size: .88em; background: var(--accent-soft); color: var(--text); padding: .08rem .35rem; border-radius: 4px; }
+  .myth { color: var(--signal); font-weight: 600; }
+
+  /* ---- datapath diagram ---- */
+  .dp { overflow-x: auto; padding: .4rem .1rem 1rem; }
+  .dp-inner { min-width: 34rem; display: flex; flex-direction: column; align-items: stretch; gap: 0; }
+  .stage {
+    border: 1px solid var(--line); border-radius: 12px; background: var(--card);
+    box-shadow: var(--shadow); padding: .85rem 1rem;
+  }
+  .stage.ctrl { border-left: 4px solid var(--accent); }
+  .stage-label { font-family: var(--mono); font-size: .68rem; letter-spacing: .1em; text-transform: uppercase; color: var(--accent); margin: 0 0 .6rem; }
+  .blocks { display: flex; flex-wrap: wrap; gap: .5rem; }
+  .blk {
+    font-family: var(--mono); font-size: .78rem; color: var(--text);
+    background: var(--dim); border: 1px solid var(--line); border-radius: 8px;
+    padding: .5rem .7rem; line-height: 1.3; flex: 1 1 auto; min-width: 7rem;
+  }
+  .blk .bk-sub { display: block; font-size: .66rem; color: var(--muted); margin-top: .15rem; }
+  .flow { align-self: center; color: var(--muted); font-family: var(--mono); font-size: 1.3rem; line-height: 1; padding: .35rem 0; }
+  .flow small { display: block; font-size: .6rem; letter-spacing: .08em; text-align: center; margin-top: .1rem; }
+
+  .ports { display: grid; grid-template-columns: repeat(8, minmax(4.6rem, 1fr)); gap: .4rem; }
+  .port {
+    border: 1px solid var(--line); border-radius: 8px; background: var(--dim);
+    padding: .5rem .45rem; font-family: var(--mono); font-size: .66rem; color: var(--muted);
+    display: flex; flex-direction: column; gap: .28rem; line-height: 1.25;
+  }
+  .port .pnum { font-size: .7rem; font-weight: 600; color: var(--text); }
+  .port .punit { color: var(--muted); }
+  .port.fma {
+    background: var(--signal-soft); border-color: var(--signal); box-shadow: 0 0 0 1px var(--signal) inset;
+  }
+  .port.fma .pnum, .port.fma .punit.hot { color: var(--signal); font-weight: 600; }
+
+  .fma-zoom {
+    margin-top: 1rem; border: 1px solid var(--signal); border-radius: 12px;
+    background: var(--signal-soft); padding: 1rem; box-shadow: var(--shadow);
+  }
+  .fma-zoom h4 { font-family: var(--mono); font-size: .82rem; color: var(--signal); margin: 0 0 .2rem; letter-spacing: .03em; }
+  .fma-zoom .sub { font-size: .8rem; color: var(--muted); margin: 0 0 .8rem; }
+  .lanes { display: grid; grid-template-columns: repeat(4, 1fr); gap: .5rem; }
+  .lane { background: var(--card); border: 1px solid var(--signal); border-radius: 8px; padding: .6rem .5rem; text-align: center; }
+  .lane .li { font-family: var(--mono); font-size: .62rem; color: var(--muted); letter-spacing: .05em; }
+  .lane .lformula { font-family: var(--mono); font-size: .82rem; color: var(--ink); font-weight: 600; margin-top: .25rem; }
+  .lane .lformula b { color: var(--signal); }
+  .per-cycle {
+    margin-top: 1rem; font-family: var(--mono); font-size: .84rem; text-align: center;
+    color: var(--text); background: var(--accent-soft); border-radius: 8px; padding: .7rem;
+  }
+  .per-cycle b { color: var(--signal); }
+
+  .legend { display: flex; gap: 1.2rem; flex-wrap: wrap; font-family: var(--mono); font-size: .72rem; color: var(--muted); margin: .8rem 0 0; }
+  .legend span { display: inline-flex; align-items: center; gap: .4rem; }
+  .swatch { width: .8rem; height: .8rem; border-radius: 3px; border: 1px solid var(--line); }
+  .swatch.a { background: var(--accent); } .swatch.s { background: var(--signal); } .swatch.d { background: var(--dim); }
+
+  /* ---- research steps ---- */
+  .steps { display: flex; flex-direction: column; gap: .9rem; counter-reset: step; }
+  .step {
+    border: 1px solid var(--line); border-radius: 12px; background: var(--card);
+    box-shadow: var(--shadow); padding: 1rem 1.1rem 1.1rem; position: relative;
+  }
+  .step::before {
+    counter-increment: step; content: counter(step);
+    font-family: var(--mono); font-size: .78rem; font-weight: 600; color: #fff;
+    background: var(--accent); width: 1.6rem; height: 1.6rem; border-radius: 6px;
+    display: inline-flex; align-items: center; justify-content: center; margin-bottom: .5rem;
+  }
+  .step h4 { font-family: var(--mono); font-size: .96rem; color: var(--ink); margin: 0 0 .4rem; }
+  .step p { margin: 0 0 .6rem; font-size: .92rem; }
+  .step p:last-child { margin: 0; }
+  .src-table { width: 100%; border-collapse: collapse; font-size: .84rem; margin: 1.2rem 0 0; }
+  .src-table th, .src-table td { text-align: left; padding: .55rem .7rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .src-table th { font-family: var(--mono); font-size: .68rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 500; }
+  .src-table td.who { font-family: var(--mono); font-size: .8rem; color: var(--ink); white-space: nowrap; }
+  .src-table td.what { color: var(--muted); }
+  .tier { display: inline-block; font-family: var(--mono); font-size: .62rem; padding: .05rem .35rem; border-radius: 4px; margin-left: .4rem; }
+  .tier.primary { background: var(--signal-soft); color: var(--signal); }
+  .tier.derived { background: var(--accent-soft); color: var(--accent); }
+
+  /* ---- code blocks ---- */
+  .codewrap { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; box-shadow: var(--shadow); margin: 0 0 1.2rem; background: var(--card); }
+  .code-head {
+    display: flex; justify-content: space-between; align-items: center; gap: 1rem;
+    background: var(--dim); border-bottom: 1px solid var(--line); padding: .55rem .9rem;
+    font-family: var(--mono); font-size: .74rem; color: var(--muted);
+  }
+  .code-head .fn { color: var(--ink); font-weight: 600; }
+  pre { margin: 0; padding: 1rem; overflow-x: auto; font-family: var(--mono); font-size: .78rem; line-height: 1.7; color: var(--text); }
+  pre code { background: none; padding: 0; font-size: inherit; color: inherit; }
+  .cmt { color: var(--muted); }
+  .kw  { color: var(--signal); font-weight: 600; }
+  .reg { color: var(--accent); }
+  .lbl { color: var(--ink); font-weight: 600; }
+  /* fixed dark terminal in both themes — never tie to --ink, which flips light in dark mode */
+  .cmd { background: #12161d; color: #e8edf3; border: 1px solid #2a3340; border-radius: 10px; padding: .9rem 1rem; font-family: var(--mono); font-size: .8rem; overflow-x: auto; line-height: 1.8; }
+  .cmd .p { color: #6ee7d8; }
+  .callout {
+    border-left: 4px solid var(--signal); background: var(--signal-soft);
+    border-radius: 0 10px 10px 0; padding: .8rem 1rem; font-size: .88rem; margin: 0 0 1.2rem;
+  }
+  .callout b { color: var(--signal); }
+
+  .foot { margin-top: 3rem; padding-top: 1.4rem; border-top: 1px solid var(--line); font-size: .82rem; color: var(--muted); font-family: var(--mono); line-height: 1.7; }
+  summary:focus-visible, details:focus-visible, .tab:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 8px; }
+  @media (prefers-reduced-motion: reduce) { *, .panel.active { animation: none !important; transition: none !important; } }
+  @media (max-width: 40rem) {
+    .ports { grid-template-columns: repeat(4, 1fr); }
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <header>
+    <p class="eyebrow">Task 1b · compute datasheet</p>
+    <h1>The HPC peak-FLOP/s equation, factor by factor</h1>
+    <p class="lede">Peak floating-point throughput is one long multiplication where <b>the units cancel until only FLOP/s survives</b>. This companion now has four parts: the equation itself, a look <b>inside your i9's datapath</b> to see where the 16 FLOPs/cycle physically come from, a guide to <b>researching chip internals yourself</b>, and a <b>runnable assembly demo</b> that pins one core to its peak.</p>
+  </header>
+
+  <div class="tabs" role="tablist" aria-label="Sections">
+    <button class="tab" role="tab" aria-selected="true"  aria-controls="p-eq"   id="t-eq"><span class="tnum">01</span> The equation</button>
+    <button class="tab" role="tab" aria-selected="false" aria-controls="p-cpu"  id="t-cpu"><span class="tnum">02</span> Inside the i9</button>
+    <button class="tab" role="tab" aria-selected="false" aria-controls="p-res"  id="t-res"><span class="tnum">03</span> Find it yourself</button>
+    <button class="tab" role="tab" aria-selected="false" aria-controls="p-asm"  id="t-asm"><span class="tnum">04</span> Assembly demo</button>
+  </div>
+
+  <!-- ============================ TAB 1: THE EQUATION ============================ -->
+  <div class="panel active" id="p-eq" role="tabpanel" aria-labelledby="t-eq">
+
+    <section class="section">
+      <h2><span class="n">01</span> The chain</h2>
+      <p>Each box is a factor. The small teal line is its <em>unit</em>. The trick to never memorizing this equation: write the units as fractions and watch them telescope.</p>
+
+      <div class="chain-scroll">
+        <div class="chain">
+          <div class="factor"><span class="fname">nodes</span><span class="funit">nodes</span><span class="fnote">how many machines in the cluster</span></div>
+          <div class="op">&times;</div>
+          <div class="factor"><span class="fname">sockets / node</span><span class="funit">sockets / node</span><span class="fnote">CPU packages per machine</span></div>
+          <div class="op">&times;</div>
+          <div class="factor"><span class="fname">cores / socket</span><span class="funit">cores / socket</span><span class="fnote">physical cores per package</span></div>
+          <div class="op">&times;</div>
+          <div class="factor"><span class="fname">clock</span><span class="funit">cycles / second</span><span class="fnote">frequency of one core</span></div>
+          <div class="op">&times;</div>
+          <div class="factor"><span class="fname">work / cycle</span><span class="funit">FLOPs / cycle</span><span class="fnote">arithmetic one core retires per tick</span></div>
+          <div class="op">=</div>
+          <div class="factor result"><span class="fname">peak</span><span class="funit">FLOPs / second</span><span class="fnote">the theoretical ceiling</span></div>
+        </div>
+      </div>
+
+      <div class="cancel-note">
+        nodes &times; <span class="strike">sockets</span>/node &times; <span class="strike">cores</span>/<span class="strike">socket</span> &times; <span class="strike">cycles</span>/s &times; FLOPs/<span class="strike">cycle</span><br />
+        &nbsp;&nbsp;&rarr; every <span class="strike">crossed</span> unit meets its match and cancels, leaving <b>FLOPs / second</b>.
+      </div>
+      <p style="margin-top:1rem">That cancellation <em>is</em> the sanity check — if your units don't reduce to FLOP/s, a factor is upside-down (this is exactly the instinct behind your "shouldn't it be sockets/core?" question below).</p>
+    </section>
+
+    <hr class="rule" />
+
+    <section class="section">
+      <h2><span class="n">02</span> What hides inside <code>FLOPs / cycle</code></h2>
+      <p>This is the factor that trips everyone, and the one the Task-1b prompt fumbled by listing "(2 for FMA) &times; (2 for mul+add)" as if they were independent. They aren't. One core does this much per cycle:</p>
+
+      <div class="unpack">
+        <div class="u-card"><div class="uv">4</div><div class="ul">SIMD lanes</div><div class="ud">An AVX2 register is 256 bits. At fp64 (8 bytes) that's 256/64 = 4 numbers processed side by side. fp32 &rarr; 8.</div></div>
+        <div class="u-card"><div class="uv">2</div><div class="ul">FMA units</div><div class="ud">Skylake/Coffee-Lake cores have two 256-bit fused-multiply-add ports (Port 0 &amp; Port 1), so two FMA instructions issue per cycle.</div></div>
+        <div class="u-card"><div class="uv">2</div><div class="ul">FLOPs / FMA</div><div class="ud">One fused multiply-add computes <code>a&times;b+c</code> — a multiply <em>and</em> an add, counted as 2 FLOPs.</div></div>
+        <div class="u-card" style="border-top:3px solid var(--signal)"><div class="uv">16</div><div class="ul">= FLOPs / cycle</div><div class="ud">4 &times; 2 &times; 2, at fp64. This is the whole "work/cycle" box above, for one core.</div></div>
+      </div>
+      <p>So the prompt's arithmetic (4&times;2&times;2 = 16) was right; only its <em>labels</em> were scrambled. The honest reading: <b>lanes &times; FMA-ports &times; (mul+add)</b>. FMA is not a bonus multiplier stacked on a separate "mul+add" — FMA <em>is</em> the mul+add. <a href="#" data-goto="cpu">See the two FMA ports physically, in tab 02 &rarr;</a></p>
+    </section>
+
+    <hr class="rule" />
+
+    <section class="section">
+      <h2><span class="n">03</span> Your chip, filled in</h2>
+      <p>A single laptop is <code>nodes = 1</code> and <code>sockets/node = 1</code>, so those two drop out and the chain collapses to <em>cores &times; clock &times; FLOPs/cycle</em>.</p>
+
+      <div class="spec">
+        <div class="spec-head"><span>INTEL CORE <b>i9-9880H</b> · Coffee Lake · AVX2</span><span>fp64 peak</span></div>
+        <div style="overflow-x:auto">
+        <table class="calc">
+          <thead><tr><th>Factor</th><th style="text-align:right">Value</th><th>Where it comes from</th></tr></thead>
+          <tbody>
+            <tr><td class="factor-name">cores</td><td class="val">8</td><td class="why">physical cores on the package</td></tr>
+            <tr><td class="factor-name">clock</td><td class="val">2.3&#8239;GHz</td><td class="why">base cycles/s (Turbo to 4.8&#8239;GHz — see note)</td></tr>
+            <tr><td class="factor-name">FLOPs / cycle</td><td class="val">16</td><td class="why">unpacked below &darr;</td></tr>
+            <tr class="sub"><td class="factor-name">— SIMD lanes</td><td class="val">4</td><td class="why">256-bit AVX2 &divide; 64-bit fp64</td></tr>
+            <tr class="sub"><td class="factor-name">— FMA units</td><td class="val">2</td><td class="why">two 256-bit FMA ports (0 &amp; 1)</td></tr>
+            <tr class="sub"><td class="factor-name">— FLOPs / FMA</td><td class="val">2</td><td class="why">mul + add</td></tr>
+            <tr class="total"><td class="factor-name"><b>peak</b> = 8 &times; 2.3e9 &times; 16</td><td class="val">294.4&#8239;GFLOP/s</td><td class="why">theoretical fp64 ceiling</td></tr>
+          </tbody>
+        </table>
+        </div>
+      </div>
+      <p style="margin-top:1rem"><span class="myth">On Turbo:</span> 4.8&#8239;GHz is single-core, thermally time-limited, and can't hold across all 8 cores at once — so the all-core sustained peak sits near the 2.3&#8239;GHz base figure. And you'll never <em>reach</em> 294: PassMark measured ~22.8&#8239;GFLOP/s on real code (~7.7% of peak), which is a normal fraction. Theoretical peak is a ceiling, not a promise. In tab 04 you'll pin one core near its <em>single-core</em> peak (~4.8&#8239;GHz &times; 16 &approx; 77&#8239;GFLOP/s) and watch it happen.</p>
+    </section>
+
+    <hr class="rule" />
+
+    <section class="section">
+      <h2><span class="n">04</span> Your four questions</h2>
+      <div class="qa">
+        <details class="q" open>
+          <summary>Is a node basically one machine? <span class="verdict yes">yes</span></summary>
+          <div class="body"><p>Yes. A <b>node</b> is one independent computer: one motherboard, one OS image, its own RAM. A supercomputer is thousands of nodes wired together by a fast network. The equation multiplies by <code>nodes</code> first because that's the coarsest unit of "how much hardware."</p></div>
+        </details>
+        <details class="q">
+          <summary>Are sockets the Linux-networking kind? <span class="verdict no">name collision</span></summary>
+          <div class="body">
+            <p>No — and this is the single most common confusion, purely because one word got reused for two unrelated things.</p>
+            <p>Here, a <b>socket</b> is the <em>physical CPU socket</em>: the mechanical slot on the motherboard where a processor package clamps in. "2-socket server" = a board with two physical CPUs. It is hardware you could cut yourself on.</p>
+            <p>The <span class="myth">~60k-simultaneous</span> figure you're thinking of is <em>network</em> sockets — an OS abstraction for a TCP/UDP connection endpoint, bounded by the 16-bit port space (~65,535 ports). Totally different concept, totally unrelated to FLOP/s. Same five letters, no shared meaning.</p>
+          </div>
+        </details>
+        <details class="q">
+          <summary>How to think about <code>cores / socket</code> — isn't it backwards? <span class="verdict no">it's per-socket</span></summary>
+          <div class="body">
+            <p>It reads <em>cores per socket</em>, and that direction is correct. A physical CPU package (socket) <b>physically contains</b> N cores etched onto the same die — your i9 is 8 cores in 1 socket, so <code>cores/socket = 8</code>. The containment runs socket &rarr; cores, so the ratio is cores <em>per</em> socket.</p>
+            <p>Your instinct to flip it to <span class="myth">sockets/core</span> comes from the networking meaning again — there, many connection-sockets do share one core while it waits on I/O. But a <em>hardware</em> socket is a physical object that holds cores; it can't be time-shared across them. Trust the unit-cancellation: you need <code>cores/socket</code> for <code>socket</code> to cancel against <code>sockets/node</code>. Flip it and the units no longer reduce to FLOP/s.</p>
+          </div>
+        </details>
+        <details class="q">
+          <summary>Does <code>cycles/second</code> just mean each core's frequency? <span class="verdict yes">yes</span></summary>
+          <div class="body"><p>Exactly. <b>Cycles/second is clock frequency</b> — 2.3&#8239;GHz = 2.3&#215;10&#8319; cycles every second, per core. A "cycle" is one tick of the clock; each tick, a core can retire up to <code>FLOPs/cycle</code> of work. You don't jump <em>from</em> cores/socket <em>to</em> cycles/second — they're two separate independent factors that both get multiplied in. Reading the chain as English: "8 cores, each ticking 2.3 billion times a second, each tick doing 16 FLOPs."</p></div>
+        </details>
+      </div>
+    </section>
+  </div>
+
+  <!-- ============================ TAB 2: INSIDE THE i9 ============================ -->
+  <div class="panel" id="p-cpu" role="tabpanel" aria-labelledby="t-cpu">
+    <section class="section">
+      <h2><span class="n">02</span> Inside one i9 core — where 16 FLOPs/cycle live</h2>
+      <p>The peak equation ends in "16 FLOPs/cycle" as if it were a single fact. It isn't — it's a physical layout. Like the MIPS datapath you studied, this is a <em>schematic</em>: an instruction enters at the top, flows down through the front-end, gets scheduled, and is executed on one of eight <b>ports</b>. The whole "16" comes from just <span style="color:var(--signal);font-weight:600">two of those eight ports</span>. This is a Skylake-client core (the microarchitecture Coffee Lake reuses); it is out-of-order and superscalar, so unlike the strictly-in-order classroom MIPS pipeline, many instructions are in flight at once.</p>
+
+      <div class="dp">
+        <div class="dp-inner">
+
+          <div class="stage ctrl">
+            <p class="stage-label">Front end · fetch &amp; decode (the "control plane")</p>
+            <div class="blocks">
+              <div class="blk">L1 I-cache <span class="bk-sub">32 KB · raw x86 bytes in</span></div>
+              <div class="blk">Branch predictor <span class="bk-sub">guesses the next address</span></div>
+              <div class="blk">Decoders &times;4 <span class="bk-sub">x86 &rarr; internal µops</span></div>
+              <div class="blk">µop cache <span class="bk-sub">skips re-decoding hot loops</span></div>
+            </div>
+          </div>
+
+          <div class="flow">&darr;<small>µops</small></div>
+
+          <div class="stage ctrl">
+            <p class="stage-label">Out-of-order engine · rename &amp; schedule</p>
+            <div class="blocks">
+              <div class="blk">Allocate / Rename <span class="bk-sub">maps to physical registers, breaks false deps</span></div>
+              <div class="blk">Reorder Buffer (ROB) <span class="bk-sub">~224 µops in flight</span></div>
+              <div class="blk">Scheduler (RS) <span class="bk-sub">~97 entries · issues a µop the cycle its inputs are ready</span></div>
+            </div>
+          </div>
+
+          <div class="flow">&darr;<small>issue up to 8 µops / cycle</small></div>
+
+          <div class="stage">
+            <p class="stage-label">Execution ports · the 8 exits from the scheduler</p>
+            <div style="overflow-x:auto">
+            <div class="ports">
+              <div class="port fma">
+                <span class="pnum">Port 0</span>
+                <span class="punit hot">256-bit FMA</span>
+                <span class="punit">ALU · mul · div · branch</span>
+              </div>
+              <div class="port fma">
+                <span class="pnum">Port 1</span>
+                <span class="punit hot">256-bit FMA</span>
+                <span class="punit">ALU · mul · LEA</span>
+              </div>
+              <div class="port"><span class="pnum">Port 2</span><span class="punit">Load / AGU</span></div>
+              <div class="port"><span class="pnum">Port 3</span><span class="punit">Load / AGU</span></div>
+              <div class="port"><span class="pnum">Port 4</span><span class="punit">Store data</span></div>
+              <div class="port"><span class="pnum">Port 5</span><span class="punit">ALU · shuffle · vec-int</span></div>
+              <div class="port"><span class="pnum">Port 6</span><span class="punit">ALU · branch · shift</span></div>
+              <div class="port"><span class="pnum">Port 7</span><span class="punit">Store AGU</span></div>
+            </div>
+            </div>
+            <div class="legend">
+              <span><span class="swatch a"></span> control / plumbing</span>
+              <span><span class="swatch s"></span> the FMA hot path (ports 0 &amp; 1)</span>
+              <span><span class="swatch d"></span> other execution units</span>
+            </div>
+          </div>
+
+          <div class="flow">&darr;<small>zoom into ONE FMA port, ONE cycle</small></div>
+
+          <div class="fma-zoom">
+            <h4>One 256-bit FMA unit, one clock tick</h4>
+            <p class="sub">The register is 256 bits wide. At fp64 that's 4 independent lanes, and the unit computes <code>a&times;b+c</code> in every lane simultaneously — this is the SIMD ("single instruction, multiple data") idea made physical.</p>
+            <div class="lanes">
+              <div class="lane"><div class="li">lane 0 · bits 0–63</div><div class="lformula">a<b>&times;</b>b<b>+</b>c</div></div>
+              <div class="lane"><div class="li">lane 1 · bits 64–127</div><div class="lformula">a<b>&times;</b>b<b>+</b>c</div></div>
+              <div class="lane"><div class="li">lane 2 · bits 128–191</div><div class="lformula">a<b>&times;</b>b<b>+</b>c</div></div>
+              <div class="lane"><div class="li">lane 3 · bits 192–255</div><div class="lformula">a<b>&times;</b>b<b>+</b>c</div></div>
+            </div>
+            <div class="per-cycle">
+              <b>2 FMA ports</b> &times; <b>4 lanes</b> &times; <b>2 FLOPs</b> (mul+add) = <b>16 fp64 FLOPs / cycle</b><br />
+              &times; 8 cores &times; 2.3&#215;10&#8319; cycles/s = <b>294&#8202;GFLOP/s</b>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <h3>How to read it against classroom MIPS</h3>
+      <p>The single-cycle MIPS datapath you saw draws one instruction's whole journey — PC &rarr; instruction memory &rarr; register file &rarr; ALU &rarr; data memory &rarr; write-back — as one straight wire, because that machine does exactly one instruction at a time. This chip keeps the same <em>skeleton</em> (fetch &rarr; decode &rarr; execute &rarr; write-back) but widens every stage: it fetches/decodes several instructions per cycle, keeps ~224 in flight, and has <em>eight</em> parallel ALUs/AGUs instead of one ALU. The "ALU" box of MIPS has, in effect, been photocopied eight times into the port row — and two of those copies are the wide FMA units that make the FLOP/s number.</p>
+      <div class="callout"><b>The key mental shift:</b> in MIPS, "what happens per cycle" is one operation. Here it's "up to 8 µops issued, and on the two FMA ports each µop is 4 lanes &times; (mul+add) = 8 FLOPs." That fan-out — 1 op &rarr; 16 FLOPs — <em>is</em> the entire distance between the scalar Python engine and the hardware ceiling.</p>
+      <p style="margin:0">Every block above is a real, documented structure — the next tab shows you exactly which reference to open to confirm each number (port assignments, ROB size, lane widths) yourself.</p>
+    </section>
+  </div>
+
+  <!-- ============================ TAB 3: FIND IT YOURSELF ============================ -->
+  <div class="panel" id="p-res" role="tabpanel" aria-labelledby="t-res">
+    <section class="section">
+      <h2><span class="n">03</span> How I found "2 FMA ports" — and how you can</h2>
+      <p>You asked where the "2 FMA ports on Coffee Lake" number comes from, and why hardware facts feel so much more scattered than, say, a Stack Overflow answer. The honest reason: <b>CPU internals have a small number of authoritative primary sources and a lot of low-quality secondary noise on top.</b> Software feels better-documented because the primary source (the code, the RFC) is usually one click away. For hardware, the trick is knowing the four or five primary sources by name and going straight to them. Here's the exact path I took.</p>
+
+      <div class="steps">
+        <div class="step">
+          <h4>Map the marketing name to a microarchitecture</h4>
+          <p>The number on the box (<code>i9-9880H</code>) is a <em>product</em>. Performance facts live one level down, at the <em>microarchitecture</em>. So step one is always: "what core is inside this?" Search <code>i9-9880H wikichip</code> or read Intel ARK. Answer: it's a <b>Coffee Lake</b> product, and Coffee Lake reuses the <b>Skylake (client)</b> core unchanged. <em>That</em> word — "Skylake" — is the key you look everything else up under. This is the single step most people skip, and it's why searching the product name directly returns junk.</p>
+        </div>
+        <div class="step">
+          <h4>Go to the microarchitecture reference, not a forum</h4>
+          <p>Open <a href="https://en.wikichip.org/wiki/intel/microarchitectures/skylake_(client)">WikiChip's Skylake (client) page</a> and find the execution-engine / port diagram. It shows the scheduler feeding 8 ports and labels which units sit on each. You'll see FMA on <b>Port 0</b> and <b>Port 1</b>. That's your "2 FMA ports," read directly off the block diagram — the same diagram I redrew in tab 02.</p>
+        </div>
+        <div class="step">
+          <h4>Confirm it with a second, independent primary source</h4>
+          <p>Never trust one page for a hardware number. The gold standard is <a href="https://www.agner.org/optimize/">Agner Fog's optimization manuals</a> — specifically <em>instruction_tables.pdf</em>. Look up <code>VFMADD231PD</code> for Skylake: it lists <b>reciprocal throughput = 0.5</b> and ports <b>p0 p1</b>. "Recip throughput 0.5" literally means <em>two per cycle</em> — an independent confirmation of the 2 FMA ports, from measured data rather than a diagram. A third cross-check is <a href="https://uops.info/">uops.info</a>, which auto-measures every instruction on every microarchitecture.</p>
+        </div>
+        <div class="step">
+          <h4>When you want the vendor's own words</h4>
+          <p>The primary-primary source is the <a href="https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html">Intel 64 &amp; IA-32 Optimization Reference Manual</a> — it has the Skylake pipeline and port table straight from Intel. It's dense and not a first stop, but it's the ground truth every other source is derived from. For "how many lanes," the <a href="https://www.felixcloutier.com/x86/vfmadd132pd:vfmadd213pd:vfmadd231pd">instruction reference for VFMADD…PD</a> tells you it operates on 256-bit YMM registers = 4 packed doubles.</p>
+        </div>
+      </div>
+
+      <table class="src-table">
+        <thead><tr><th>Source</th><th>What it's best for</th></tr></thead>
+        <tbody>
+          <tr><td class="who">WikiChip <span class="tier derived">diagram</span></td><td class="what">Fast, readable per-microarchitecture block diagrams: ports, cache sizes, ROB depth. Your first stop after finding the µarch name.</td></tr>
+          <tr><td class="who">Agner Fog <span class="tier primary">measured</span></td><td class="what">Instruction tables (latency / throughput / ports) and a prose microarchitecture manual. The reference practitioners cite. Free PDFs.</td></tr>
+          <tr><td class="who">uops.info <span class="tier primary">measured</span></td><td class="what">Machine-generated latency/throughput/port-usage for every instruction × µarch. Great for a second opinion on Agner.</td></tr>
+          <tr><td class="who">Intel Opt. Manual <span class="tier primary">vendor</span></td><td class="what">The authoritative source everything else derives from. Dense; go here to settle disputes.</td></tr>
+          <tr><td class="who">felixcloutier.com <span class="tier derived">ISA</span></td><td class="what">Clean HTML mirror of the Intel instruction-set reference. Best for "what does this exact instruction do / how wide."</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Why this feels harder than software research</h3>
+      <p>It isn't your domain knowledge — it's a real structural difference, and naming it helps:</p>
+      <div class="callout">
+        <b>Software:</b> the primary source (source code, the RFC, the language spec) is public and one search away, and Q&amp;A sites like Stack Overflow sit <em>directly</em> on top of it.<br /><br />
+        <b>Hardware:</b> the primary source is a 5,000-page vendor PDF plus a handful of independent measurers (Agner, uops.info). Most web results are <em>tertiary</em> — forum posts and blogs summarizing summaries — so a naive search surfaces the noise. The skill isn't grinding harder; it's <b>knowing the ~5 primary names above and jumping straight to them</b>, exactly the way you'd jump straight to the language spec instead of a random blog.
+      </div>
+      <p style="margin:0">Rule of thumb: <b>product name &rarr; microarchitecture name &rarr; WikiChip for the picture &rarr; Agner/uops.info to confirm the number &rarr; Intel manual only to settle a dispute.</b> Follow that order and CPU facts stop feeling like folklore.</p>
+    </section>
+  </div>
+
+  <!-- ============================ TAB 4: ASSEMBLY DEMO ============================ -->
+  <div class="panel" id="p-asm" role="tabpanel" aria-labelledby="t-asm">
+    <section class="section">
+      <h2><span class="n">04</span> See peak FLOP/s on your own hardware</h2>
+      <p>This is the "watch it happen" exercise you asked for. We hand-write the exact instruction from tab 02 — <code>vfmadd231pd</code> on 256-bit <code>ymm</code> registers — in a tight loop, feed it enough <em>independent</em> accumulators to hide latency, time it, and divide FLOPs by seconds. On your i9 a single core should report tens of GFLOP/s (near <code>single-core turbo &times; 16</code>), against the ~2&#8202;MFLOP/s of the scalar Python engine — a factor of ~20,000&times;, seen live.</p>
+
+      <div class="callout">
+        <b>Why 10 accumulators?</b> One FMA has ~4-cycle latency but the port accepts a new one every cycle. If you chain <code>x = fma(a,b,x)</code>, each op waits 4 cycles for the previous result → you'd hit ¼ of peak. Using 10 <em>independent</em> running sums keeps both FMA ports busy every cycle while any one result is still cooking. This "break the dependency chain" trick is the whole game in peak-FLOP microbenchmarks.
+      </div>
+
+      <div class="codewrap">
+        <div class="code-head"><span class="fn">fma_kernel.s</span><span>x86-64 · AT&amp;T syntax · AVX2+FMA · macOS/Linux</span></div>
+        <pre><code><span class="cmt"># =====================================================================
+#  fma_kernel.s  —  the tightest fp64 FMA loop the Skylake core allows.
+#  Computes nothing useful; its ONLY job is to keep ports 0 & 1 saturated
+#  so the measured GFLOP/s approaches the hardware ceiling from tab 02.
+#
+#  Instruction ref (what vfmadd231pd does, lane by lane):
+#    https://www.felixcloutier.com/x86/vfmadd132pd:vfmadd213pd:vfmadd231pd
+#  Why 0.5 recip-throughput = 2/cycle (the "2 FMA ports" fact):
+#    https://www.agner.org/optimize/instruction_tables.pdf   (search VFMADD)
+#  AT&T vs Intel assembly syntax (operand order is REVERSED here):
+#    https://en.wikipedia.org/wiki/X86_assembly_language#Syntax
+# =====================================================================</span>
+
+    <span class="kw">.text</span>
+    <span class="kw">.globl</span> _fma_kernel            <span class="cmt"># macOS prefixes C symbols with '_'. On Linux</span>
+                                  <span class="cmt"># use 'fma_kernel' (no underscore) instead.</span>
+
+<span class="cmt"># double fma_kernel(uint64_t iters);
+#   arg  iters -> %rdi   (System V AMD64 calling convention: 1st int arg)
+#   ret  double -> %xmm0
+#   FLOPs performed = iters * 10 accumulators * 4 lanes * 2 (mul+add)</span>
+<span class="lbl">_fma_kernel:</span>
+    <span class="kw">vbroadcastsd</span> Lc(<span class="reg">%rip</span>), <span class="reg">%ymm10</span>   <span class="cmt"># ymm10 = [c,c,c,c], a tiny fp64 constant in all 4 lanes</span>
+    <span class="kw">vmovapd</span>      <span class="reg">%ymm10</span>, <span class="reg">%ymm11</span>     <span class="cmt"># ymm11 = same; we multiply ymm10*ymm11 each step</span>
+
+    <span class="cmt"># 10 independent accumulators, all zeroed. xorpd of a reg with itself = 0.</span>
+    <span class="kw">vxorpd</span> <span class="reg">%ymm0</span>,<span class="reg">%ymm0</span>,<span class="reg">%ymm0</span>
+    <span class="kw">vxorpd</span> <span class="reg">%ymm1</span>,<span class="reg">%ymm1</span>,<span class="reg">%ymm1</span>
+    <span class="kw">vxorpd</span> <span class="reg">%ymm2</span>,<span class="reg">%ymm2</span>,<span class="reg">%ymm2</span>
+    <span class="kw">vxorpd</span> <span class="reg">%ymm3</span>,<span class="reg">%ymm3</span>,<span class="reg">%ymm3</span>
+    <span class="kw">vxorpd</span> <span class="reg">%ymm4</span>,<span class="reg">%ymm4</span>,<span class="reg">%ymm4</span>
+    <span class="kw">vxorpd</span> <span class="reg">%ymm5</span>,<span class="reg">%ymm5</span>,<span class="reg">%ymm5</span>
+    <span class="kw">vxorpd</span> <span class="reg">%ymm6</span>,<span class="reg">%ymm6</span>,<span class="reg">%ymm6</span>
+    <span class="kw">vxorpd</span> <span class="reg">%ymm7</span>,<span class="reg">%ymm7</span>,<span class="reg">%ymm7</span>
+    <span class="kw">vxorpd</span> <span class="reg">%ymm8</span>,<span class="reg">%ymm8</span>,<span class="reg">%ymm8</span>
+    <span class="kw">vxorpd</span> <span class="reg">%ymm9</span>,<span class="reg">%ymm9</span>,<span class="reg">%ymm9</span>
+
+    <span class="kw">testq</span> <span class="reg">%rdi</span>, <span class="reg">%rdi</span>            <span class="cmt"># if iters == 0, skip the loop</span>
+    <span class="kw">je</span>    Ldone
+<span class="lbl">Lloop:</span>
+    <span class="cmt"># AT&T operand order: vfmadd231pd  SRC2, SRC1, DST
+    #   computes  DST = SRC1*SRC2 + DST   -> here  ymmN = ymm10*ymm11 + ymmN
+    # 10 of them = 5 cycles of work on 2 ports; the next iteration's copies
+    # can start before these finish, so both FMA ports stay 100% busy.</span>
+    <span class="kw">vfmadd231pd</span> <span class="reg">%ymm11</span>,<span class="reg">%ymm10</span>,<span class="reg">%ymm0</span>
+    <span class="kw">vfmadd231pd</span> <span class="reg">%ymm11</span>,<span class="reg">%ymm10</span>,<span class="reg">%ymm1</span>
+    <span class="kw">vfmadd231pd</span> <span class="reg">%ymm11</span>,<span class="reg">%ymm10</span>,<span class="reg">%ymm2</span>
+    <span class="kw">vfmadd231pd</span> <span class="reg">%ymm11</span>,<span class="reg">%ymm10</span>,<span class="reg">%ymm3</span>
+    <span class="kw">vfmadd231pd</span> <span class="reg">%ymm11</span>,<span class="reg">%ymm10</span>,<span class="reg">%ymm4</span>
+    <span class="kw">vfmadd231pd</span> <span class="reg">%ymm11</span>,<span class="reg">%ymm10</span>,<span class="reg">%ymm5</span>
+    <span class="kw">vfmadd231pd</span> <span class="reg">%ymm11</span>,<span class="reg">%ymm10</span>,<span class="reg">%ymm6</span>
+    <span class="kw">vfmadd231pd</span> <span class="reg">%ymm11</span>,<span class="reg">%ymm10</span>,<span class="reg">%ymm7</span>
+    <span class="kw">vfmadd231pd</span> <span class="reg">%ymm11</span>,<span class="reg">%ymm10</span>,<span class="reg">%ymm8</span>
+    <span class="kw">vfmadd231pd</span> <span class="reg">%ymm11</span>,<span class="reg">%ymm10</span>,<span class="reg">%ymm9</span>
+    <span class="kw">decq</span> <span class="reg">%rdi</span>                    <span class="cmt"># iters--</span>
+    <span class="kw">jne</span>  Lloop                    <span class="cmt"># loop while iters != 0</span>
+<span class="lbl">Ldone:</span>
+    <span class="cmt"># Reduce the 10 vector accumulators down to one scalar so the compiler
+    # can't delete the whole loop as "dead code". Correctness of the sum
+    # doesn't matter — only that the result is USED (returned).</span>
+    <span class="kw">vaddpd</span> <span class="reg">%ymm1</span>,<span class="reg">%ymm0</span>,<span class="reg">%ymm0</span>
+    <span class="kw">vaddpd</span> <span class="reg">%ymm3</span>,<span class="reg">%ymm2</span>,<span class="reg">%ymm2</span>
+    <span class="kw">vaddpd</span> <span class="reg">%ymm5</span>,<span class="reg">%ymm4</span>,<span class="reg">%ymm4</span>
+    <span class="kw">vaddpd</span> <span class="reg">%ymm7</span>,<span class="reg">%ymm6</span>,<span class="reg">%ymm6</span>
+    <span class="kw">vaddpd</span> <span class="reg">%ymm9</span>,<span class="reg">%ymm8</span>,<span class="reg">%ymm8</span>
+    <span class="kw">vaddpd</span> <span class="reg">%ymm2</span>,<span class="reg">%ymm0</span>,<span class="reg">%ymm0</span>
+    <span class="kw">vaddpd</span> <span class="reg">%ymm6</span>,<span class="reg">%ymm4</span>,<span class="reg">%ymm4</span>
+    <span class="kw">vaddpd</span> <span class="reg">%ymm8</span>,<span class="reg">%ymm0</span>,<span class="reg">%ymm0</span>
+    <span class="kw">vaddpd</span> <span class="reg">%ymm4</span>,<span class="reg">%ymm0</span>,<span class="reg">%ymm0</span>   <span class="cmt"># now ymm0 holds 4 partial sums</span>
+    <span class="kw">vextractf128</span> $1, <span class="reg">%ymm0</span>, <span class="reg">%xmm1</span>  <span class="cmt"># grab the high 128 bits (lanes 2,3)</span>
+    <span class="kw">vaddpd</span> <span class="reg">%xmm1</span>,<span class="reg">%xmm0</span>,<span class="reg">%xmm0</span>       <span class="cmt"># add to low 128 (lanes 0,1) -> 2 doubles</span>
+    <span class="kw">vhaddpd</span> <span class="reg">%xmm0</span>,<span class="reg">%xmm0</span>,<span class="reg">%xmm0</span>      <span class="cmt"># horizontal add -> 1 double, now in xmm0 = return</span>
+    <span class="kw">vzeroupper</span>                     <span class="cmt"># good hygiene: avoid AVX/SSE transition stalls</span>
+    <span class="kw">ret</span>
+
+    <span class="kw">.section</span> __TEXT,__const       <span class="cmt"># (Linux: use  .section .rodata  instead)</span>
+    <span class="kw">.p2align</span> 3
+<span class="lbl">Lc:</span> <span class="kw">.double</span> 1.0000001            <span class="cmt"># tiny value: accumulators grow slowly, never overflow to inf</span></code></pre>
+      </div>
+
+      <div class="codewrap">
+        <div class="code-head"><span class="fn">driver.c</span><span>times the kernel and prints GFLOP/s</span></div>
+        <pre><code><span class="cmt">// driver.c — calls the asm kernel, measures wall-clock, reports GFLOP/s.
+// clock_gettime docs: https://man7.org/linux/man-pages/man2/clock_gettime.2.html</span>
+<span class="kw">#include</span> &lt;stdio.h&gt;
+<span class="kw">#include</span> &lt;stdint.h&gt;
+<span class="kw">#include</span> &lt;time.h&gt;
+
+<span class="cmt">// Implemented in fma_kernel.s. Returns a scalar so the loop isn't optimized away.</span>
+<span class="kw">extern</span> double fma_kernel(uint64_t iters);
+
+<span class="kw">int</span> main(void) {
+    <span class="cmt">// ~2 billion loop iterations keeps the kernel running ~1s — long enough
+    // to swamp timer noise, short enough to stay in single-core turbo.</span>
+    uint64_t iters = 2000000000ULL;
+
+    struct timespec t0, t1;
+    clock_gettime(CLOCK_MONOTONIC, &amp;t0);
+    <span class="kw">double</span> sink = fma_kernel(iters);       <span class="cmt">// the timed region</span>
+    clock_gettime(CLOCK_MONOTONIC, &amp;t1);
+
+    <span class="kw">double</span> secs  = (t1.tv_sec - t0.tv_sec) + (t1.tv_nsec - t0.tv_nsec) * 1e-9;
+    <span class="cmt">// 10 accumulators * 4 fp64 lanes * 2 FLOPs(mul+add) = 80 FLOPs per iteration</span>
+    <span class="kw">double</span> flops = (double)iters * 80.0;
+
+    printf(<span class="reg">"ignore: %g\n"</span>, sink);   <span class="cmt">// forces 'sink' to be used</span>
+    printf(<span class="reg">"time:   %.4f s\n"</span>, secs);
+    printf(<span class="reg">"GFLOP/s (1 core): %.1f\n"</span>, flops / secs / 1e9);
+    <span class="kw">return</span> 0;
+}</code></pre>
+      </div>
+
+      <h3>Build &amp; run</h3>
+      <p>You're on macOS with an Intel core, so <code>clang</code> assembles the hand-written <code>.s</code> file and links it with the C driver in one command:</p>
+      <div class="cmd"><span class="p">$</span> clang -O2 -mavx2 -mfma driver.c fma_kernel.s -o peak_fma<br /><span class="p">$</span> ./peak_fma</div>
+      <p style="margin-top:1rem">Expected output (numbers vary with turbo/thermals):</p>
+      <div class="cmd">ignore: 3.2e+08<br />time:&nbsp;&nbsp; 0.83 s<br /><span style="color:#e0a44a">GFLOP/s (1 core): 74.9</span></div>
+
+      <div class="callout" style="margin-top:1.2rem">
+        <b>Reading the result.</b> ~75&#8202;GFLOP/s on one core &approx; <code>4.7&#8202;GHz &times; 16 FLOPs/cycle</code> — you're seeing single-core turbo &times; the exact "16" from tab 02, in the flesh. Multiply by 8 cores and you'd approach the 294&#8202;GFLOP/s ceiling (real all-core runs fall a bit short: turbo drops and heat rises). Against your scalar engine's ~2&#8202;MFLOP/s, this one core is ~37,000&times; faster — the entire gap this project exists to close.
+      </div>
+
+      <h3>Things to try</h3>
+      <p style="margin-bottom:.5rem">To make the hardware lessons tangible, change one thing at a time and re-run:</p>
+      <ul style="margin-top:0;color:var(--muted);font-size:.92rem;line-height:1.7">
+        <li><b>Delete accumulators.</b> Cut the loop from 10 <code>vfmadd</code>s to 1 (and fix the reduction). Watch throughput fall to ~¼ — that's the 4-cycle latency no longer being hidden.</li>
+        <li><b>Switch to fp32.</b> Use <code>vfmadd231ps</code> and 8 lanes/register; the GFLOP/s roughly doubles, because the same 256-bit unit now packs 8 lanes instead of 4.</li>
+        <li><b>Go multi-core.</b> Launch the kernel on N threads (e.g. OpenMP) and watch total GFLOP/s scale toward 294 — then dip as all-core turbo throttles under sustained load.</li>
+      </ul>
+    </section>
+  </div>
+
+  <p class="foot">
+    Grading companion to <code>performance/1_instrument_current_engine/graded.md</code> · Task 1b<br />
+    Peak is fp64 for the i9-9880H because <code>Value.data</code> is a Python float = C double.<br />
+    Sources: WikiChip (Skylake client), Agner Fog instruction tables, uops.info, Intel Optimization Manual.<br />
+    Achieved by the scalar engine: ~2 MFLOP/s &rarr; ~0.0007% of this 294 GFLOP/s ceiling.
+  </p>
+
+</div>
+
+<script>
+  (function () {
+    var tabs = Array.prototype.slice.call(document.querySelectorAll('.tab'));
+    var panels = {
+      'p-eq': document.getElementById('p-eq'),
+      'p-cpu': document.getElementById('p-cpu'),
+      'p-res': document.getElementById('p-res'),
+      'p-asm': document.getElementById('p-asm')
+    };
+    function select(tab) {
+      tabs.forEach(function (t) {
+        var on = t === tab;
+        t.setAttribute('aria-selected', on ? 'true' : 'false');
+        var p = panels[t.getAttribute('aria-controls')];
+        if (p) p.classList.toggle('active', on);
+      });
+      tab.focus();
+    }
+    tabs.forEach(function (tab, i) {
+      tab.addEventListener('click', function () { select(tab); });
+      tab.addEventListener('keydown', function (e) {
+        if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+          e.preventDefault();
+          var dir = e.key === 'ArrowRight' ? 1 : -1;
+          select(tabs[(i + dir + tabs.length) % tabs.length]);
+        }
+      });
+    });
+    // in-page "jump to tab" links
+    document.querySelectorAll('[data-goto]').forEach(function (a) {
+      a.addEventListener('click', function (e) {
+        e.preventDefault();
+        var map = { cpu: 't-cpu', res: 't-res', asm: 't-asm', eq: 't-eq' };
+        var t = document.getElementById(map[a.getAttribute('data-goto')]);
+        if (t) { select(t); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+      });
+    });
+  })();
+</script>
+</body>
+</html>
