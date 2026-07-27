@@ -110,22 +110,55 @@ for output_value, label_one_hot in zip(output_values, data.label_to_one_hot(), s
   output_value.data = label_one_hot
 
 # %%
-import cProfile, pstats, io
+import argparse, cProfile, io, pstats, time
 from pstats import SortKey
-pr = cProfile.Profile()
-pr.enable()
 
-# ... do something ...
-loss.forward()
+def run() -> None:
+  loss.forward()
 
-# backwards
-zero_all_gradients(loss)
-loss.gradient = 1.0
-loss.backward()
+  # backwards
+  zero_all_gradients(loss)
+  loss.gradient = 1.0
+  loss.backward()
 
-pr.disable()
-s = io.StringIO()
-sortby = SortKey.CUMULATIVE
-ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
-ps.print_stats()
-print(s.getvalue())
+def _time(iterations: int) -> float:
+  start = time.perf_counter()
+  for _ in range(iterations):
+    run()
+  return time.perf_counter() - start
+
+def main() -> None:
+  parser = argparse.ArgumentParser(description='profile or benchmark the forward + backward pass')
+  parser.add_argument('mode', nargs='?', choices=('profile', 'benchmark'), default='profile')
+  parser.add_argument('-n', '--repeat', type=int, default=1, help='iterations to run')
+  # `parse_known_args` so the script still works when run cell-by-cell in a notebook
+  args, _ = parser.parse_known_args()
+
+  if args.mode == 'profile':
+    pr = cProfile.Profile()
+    pr.enable()
+    for _ in range(args.repeat):
+      run()
+    pr.disable()
+    s = io.StringIO()
+    pstats.Stats(pr, stream=s).sort_stats(SortKey.CUMULATIVE).print_stats()
+    print(s.getvalue())
+  else:
+    # differential measurement, as done by nanoBench (https://d-nb.info/1212853466/34):
+    # time `n` iterations and `2 * n` iterations, then report `(t_2n - t_n) / n`.
+    # both runs pay the same fixed overhead (timer calls, loop setup, cache/branch
+    # predictor warm-up), so subtracting cancels it out and leaves just the marginal
+    # cost of `n` more iterations. the naive `t_n / n` includes that overhead.
+    run()  # warm up caches / lazily-initialized state before either timed run
+
+    t_n = _time(args.repeat)
+    t_2n = _time(2 * args.repeat)
+
+    print(f'iterations:   {args.repeat}')
+    print(f't(n):         {t_n * 1e3:.3f} ms')
+    print(f't(2n):        {t_2n * 1e3:.3f} ms')
+    print(f'naive mean:   {t_n / args.repeat * 1e6:.3f} us/iter')
+    print(f'differential: {(t_2n - t_n) / args.repeat * 1e6:.3f} us/iter')
+
+if __name__ == '__main__':
+  main()

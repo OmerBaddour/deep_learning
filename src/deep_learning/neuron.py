@@ -36,7 +36,7 @@ class Neuron:
           input.label = label
         input_values.append(input)
       else:
-        raise TypeError('Unsupported type')
+        raise TypeError(f'Unsupported type: {type(input)}')
 
     # construct graph out of Values
     multiply_values: list[Value] = []

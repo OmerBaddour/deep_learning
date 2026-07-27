@@ -45,7 +45,7 @@ lines: list[str] = []
 datas: list[Data] = []
 
 with open('data/MNIST_CSV/mnist_train.csv') as f:
-  lines = f.readlines()
+  lines = [f.readline()]
 
 for line in lines:
   datas.append(Data.from_csv_row([int(num) for num in line.split(',')]))
@@ -102,6 +102,37 @@ loss = cross_entropy(
 )
 
 # %%
+# topologically sort graph
+topologically_sorted_graph: list[Value] = []
+visited: set[Value] = set()
+
+def _traverse(
+    node: Value,
+    topologically_sorted_graph: list[Value],
+    visited: set[Value],
+) -> None:
+  # NOTE: assume acyclic for simplicity
+  if node in visited:
+    return
+  elif len(node.children) == 0:
+    visited.add(node)
+    topologically_sorted_graph.append(node)
+  else:
+    for child in node.children:
+      _traverse(child, topologically_sorted_graph, visited)
+    visited.add(node)
+    topologically_sorted_graph.append(node)
+_traverse(loss, topologically_sorted_graph, visited)
+
+# %%
+# `Value.forward()` recursively populates `node.data`. since `node.data` is already set for leaf nodes, we omit them
+forward_order = [node for node in topologically_sorted_graph if len(node.children) > 0]
+
+# `Value.backward()` recursively populates `node.gradient`. since leaf nodes get their gradients populated by their parents, we omit them
+# this decomposes to just reversed `forward``_order`
+backward_order = list(reversed(forward_order))
+
+# %%
 # prepare graph
 data = datas[0]
 for input_value, pixel in zip(input_values, data.flattened_pixels, strict=True):
@@ -114,7 +145,22 @@ import argparse, cProfile, io, pstats, time
 from pstats import SortKey
 
 def run() -> None:
-  loss.forward()
+  # instead of `loss.forward()` we do
+  for node in forward_order:
+    node.data = node.op.forward([child.data for child in node.children])
+
+  # backwards
+  # instead of `zero_all_gradients(loss)` we do
+  for node in topologically_sorted_graph:
+    node.gradient = 0
+
+  loss.gradient = 1.0
+  # instead of `loss.backward()` we do
+  for node in backward_order:
+    children_local_derivatives = node.op.backward([child.data for child in node.children])
+    zipped: list[tuple[Value, float]] = zip(node.children, children_local_derivatives, strict=True)
+    for child, local_derivative in zipped:
+      child.gradient += local_derivative * node.gradient
 
 def _time(iterations: int) -> float:
   start = time.perf_counter()
@@ -123,7 +169,7 @@ def _time(iterations: int) -> float:
   return time.perf_counter() - start
 
 def main() -> None:
-  parser = argparse.ArgumentParser(description='profile or benchmark the forward pass')
+  parser = argparse.ArgumentParser(description='profile or benchmark the single-traversal forward + backward pass')
   parser.add_argument('mode', nargs='?', choices=('profile', 'benchmark'), default='profile')
   parser.add_argument('-n', '--repeat', type=int, default=1, help='iterations to run')
   # `parse_known_args` so the script still works when run cell-by-cell in a notebook

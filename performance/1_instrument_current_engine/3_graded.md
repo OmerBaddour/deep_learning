@@ -4,6 +4,29 @@
 **Goal:** replace hand-waving with real numbers about *where* time goes today, so the
 later speedups can be attributed. Two separate exercises; each is its own session.
 
+> ## 🟦 GRADER — Overall: strong work, A−
+> Your *method* is excellent — you reasoned the graph structure from first principles and
+> cross-checked every op count against the profiler. That instinct (predict, then confirm)
+> is exactly right. Three things to fix, in priority order:
+>
+> 1. **🟥 `728` should be `784`.** A 28×28 image has 28·28 = **784** pixels, not 728. You
+>    wrote 728 everywhere and it silently poisoned every downstream count. This single fix
+>    resolves *all three* of the "I'm not sure why these are slightly different" mysteries
+>    you flagged. Corrected ground truth (instrumented, see notes below):
+>    **51,812 `Value` nodes · 25,545 `op.forward` · 25,545 `op.backward`.**
+> 2. **🟥 You reported the cProfile time as wall-clock.** cProfile instruments all ~200k
+>    calls and inflates time ~4–5×. Un-profiled, a forward pass is **~25 ms** — so the
+>    ~30 ms anchor is *confirmed*, and your "117 ms" is a profiler artifact. Always take the
+>    absolute anchor with a plain `perf_counter`; use cProfile only for the *relative* breakdown.
+> 3. **🟨 op.forward and op.backward are equal by construction** (both = # non-leaf nodes).
+>    Every forward op creates exactly one `Value`, and that `Value` gets exactly one backward.
+>    That identity is the clean answer to your line-98 confusion.
+>
+> The 1b peak-FLOP/s derivation lands on the right number (294 GFLOP/s) but for muddled
+> reasons, and the "% of peak" has an arithmetic slip — see the inline notes. Your instinct
+> to question the "(2 for FMA) × (2 for mul+add)" double-count was **correct**.
+> HTML answer to your HPC-equation questions: see the hosted artifact linked at the bottom.
+
 ## 1a. Empirical profiling (a measurement session)
 
 Using the 784→32→10 net and the training/eval loop from `notebooks/mnist.ipynb`:
@@ -19,6 +42,9 @@ reason from the graph structure and confirm.)
 #### Input layer
 
 One time creation of 728 `Value` instances (1 per pixel)
+
+> 🟥 **GRADER — 784, not 728.** 28×28 = 784. Everything below inherits this error. I'll flag
+> the corrected total once at the grand total rather than re-flagging each line.
 
 #### First layer
 
@@ -97,6 +123,29 @@ It is also worth adding it makes sense that 23,726 `op.forward` calls * 2 is a b
 
 I am not sure why the number of `op.forward` calls is not exactly equal to the number of `op.backward` calls. High level, both read to me being performed on nodes with children.
 
+> 🟩🟥 **GRADER — right structure, wrong arithmetic (the 728 tax). Corrected ground truth**
+> (I instrumented it — counted distinct nodes via `set.add`, which the profiler also reports as 51,812):
+>
+> | quantity | your answer | actual | why |
+> |---|---|---|---|
+> | `Value` nodes | 47,823 | **51,812** | 784 vs 728 in L1 |
+> | `op.forward` | 23,726 | **25,545** | dominated by L1 = 784·32 = 25,088 `MULTIPLY` |
+> | `op.backward` | 23,444 | **25,545** | = # non-leaf nodes |
+> | leaf nodes | 24,379 | **26,267** | = total − non-leaf |
+>
+> **Your line-98 confusion, resolved:** `op.forward` and `op.backward` are *exactly equal*,
+> and it's not a coincidence — it's structural. Each `op.forward` call constructs exactly one
+> output `Value` (a non-leaf node); `backward()` then visits each non-leaf node exactly once.
+> So `#op.forward = #non-leaf nodes = #op.backward = 25,545`, always. You computed them two
+> different ways (forward by counting ops, backward by subtracting leaves) and the 728 error
+> made the two paths disagree — masking the identity. Sanity check the numbers land right:
+> `MULTIPLY` alone = 784·32 + 32·10 + 10 (CE terms) + 1 (final negate) = **25,419**, which is
+> the exact `op.py:71` count in your own profile below. That's your confirmation.
+>
+> One subtlety worth internalizing: `leaves (26,267) > non-leaves (25,545)`. The graph is
+> almost entirely binary `MULTIPLY` nodes in L1, each consuming one weight-leaf + one shared
+> input — so weight-leaves ≈ product-nodes, and everything else is rounding error.
+
 ---
 
 ### Question
@@ -110,7 +159,7 @@ the `op.forward` dispatch, the `list`/`zip` comprehensions, the SGD update loop?
 Most of the `Value.forward()` time is spent in `_traverse()` and doing set operations with `_traverse()`'s `visited`.
 
 ```sh
-✗ uv run data/omer_questions/simd_speedup_plan/1_instrument_current_engine/answer_benchmark_forward_pass.py
+✗ uv run python performance/1_instrument_current_engine/answer_benchmark_forward_pass.py profile
          205780 function calls (129340 primitive calls) in 0.117 seconds
 
    Ordered by: cumulative time
@@ -134,7 +183,28 @@ Most of the `Value.forward()` time is spent in `_traverse()` and doing set opera
 
 This makes me think I would get a ton of value from building a list of ordered `Value`s for each `MultiLayerPerceptron` one time and storing it in the `MultiLayerPerceptron` instance, such that `forward()` is closer to purely evaluating expressions of `Value.data`s and operations.
 
+> 🟩 **GRADER — this is the whole thesis of the project, and you found it yourself.** Precompute
+> the topological order once, then `forward()` is a flat `for node in order: node.data = ...`
+> loop with no recursion, no `visited` set, no `in`-membership tests. That kills essentially
+> all of the `_traverse` + `set.add` cost you see dominating below. Two things to notice:
+> (1) The `76,441` `_traverse` calls are **not** the node count — `_traverse` fires once per
+> *edge* (parent→child), so it's `#edges + 1 = 76,440 + 1`. Each node is `add`-ed to `visited`
+> once, which is why `set.add` = 51,812 = the true node count. (2) Flattening to a list is the
+> scalar version of the win; the *real* endgame (Task 2+) is that a flat homogeneous array of
+> operations is exactly what lets you SIMD-vectorize — this profile is the "before" picture.
+
 I'm also seeing that a non-trivial proportion of the time is spent doing `len()`, which is purely for correctness assertions. Perhaps there is a clever way to support a separate `test` mode that is separate to the `run_fast` mode or something. Though I am surprised `len()` takes more time than list `append()`, since under the hood I would think `len()` is a heap variable read and `append()` can provoke something time consuming like `realloc()` in C...
+
+> 🟨 **GRADER — two corrections here.** (a) The `len()` cost isn't the assertions — it's
+> `len(node.children) == 0` in `_traverse`, called on the *leaf-check* every traversal step.
+> That's structural, not a debug-only cost, so a `test`/`fast` mode wouldn't remove it (though
+> the flat-list rewrite would). (b) Your `len` vs `append` comparison is apples-to-oranges:
+> `append` only shows up in the *forward+backward* profile (51,812 calls, 0.012 s) because the
+> topo-sort in `backward()` builds a list; the forward-only run has no `append` at all. So
+> you're comparing counts across two different runs. Per-call they're both ~sub-100ns C ops;
+> the totals differ because of call *count* and because `len` here is `len` of a Python list
+> attribute lookup path, not a bare read. Bigger point: **both are pure interpreter overhead** —
+> neither is arithmetic — which is exactly the tax the next sanity question is about.
 
 #### Numeric alignment with my analysis
 
@@ -150,6 +220,12 @@ Total = 23,296 + 320 + 10 = 23,626
     25419    0.008    0.000    0.008    0.000 /Users/Omer/Documents/Nerd/AI/deep_learning/src/deep_learning/op.py:71(forward)
 ```
 I'm not sure why these are slightly different...
+
+> 🟥 **GRADER — the 728 tax again, plus one missed op.** With 784: L1 = 784·32 = 25,088;
+> L2 = 32·10 = 320; cross-entropy `event_plus_epsilon * log(...)` = 10; **and the final
+> `-Value(...)` negate is `x * -1`, one more `MULTIPLY`**. 25,088 + 320 + 10 + 1 = **25,419** —
+> exactly the profiler's `op.py:71` count. So it wasn't "slightly different," it was 784-vs-728
+> (1,792 of the gap) plus the forgotten negate (1). Mystery fully closed.
 
 Counting PLUS `op.forward` calls:
 
@@ -190,7 +266,7 @@ One per input in softmax: 10
 Same story with `Value.forward()` and `Value.backward()`: most of the time is spent in `_traverse()`.
 
 ```sh
-✗ uv run data/omer_questions/simd_speedup_plan/1_instrument_current_engine/answer_benchmark_forward_and_backward_pass.py 
+✗ uv run python performance/1_instrument_current_engine/answer_benchmark_forward_and_backward_pass.py profile 
          745183 function calls (515863 primitive calls) in 0.450 seconds
 
    Ordered by: cumulative time
@@ -233,6 +309,25 @@ Confirm the anchor: is a forward pass really ~30 ms? Split forward vs backward.
 
 According to the above the forward pass actually takes `0.117 seconds`.
 
+> 🟥 **GRADER — this is measuring cProfile, not the engine.** cProfile wraps *every one* of the
+> ~205k calls with instrumentation; that overhead is what you timed. Re-measured with a bare
+> `time.perf_counter` loop (profiler off, best-of-20) — now available as the scripts' `benchmark`
+> mode:
+>
+> ```
+> uv run python performance/1_instrument_current_engine/answer_benchmark_forward_pass.py benchmark -n 20
+> uv run python performance/1_instrument_current_engine/answer_benchmark_forward_and_backward_pass.py benchmark -n 20
+>
+> forward only:      ~25 ms
+> forward + backward: ~129 ms   →  backward alone ~104 ms (~4× forward)
+> ```
+>
+> So: **the ~30 ms anchor is confirmed** (25 ms), your 117 ms is a ~4.7× profiler tax, and you
+> now have the forward/backward split the question asks for — backward is ~4× forward because
+> the topo-sort traversal runs again *and* every non-leaf does a `zip` + per-child gradient
+> accumulate. Rule of thumb: **cProfile for the *shape* of the cost, `perf_counter` for the
+> *absolute* number.** Use the 25 ms (not 117 ms) as the denominator in 1b.
+
 ### Question
 
 Sanity: what fraction of time is *actual float arithmetic* vs Python overhead?
@@ -257,6 +352,18 @@ Relevant rows:
 Though arguably we only care about rows with `built-in method builtins.sum`, `math.tanh`, `math.log`, which all contribute less than 0.001s.
 So 0% of the time measured to 0.001s precision.
 
+> 🟩 **GRADER — correct punchline, tighten the reasoning.** "≈0% arithmetic, ≈100% overhead" is
+> exactly the conclusion the exercise wants — this *is* the interpreter tax, made concrete.
+> Two refinements: (1) Even the `op.py:71 forward` row (0.008 s) is mostly *not* arithmetic —
+> it's the Python-level function call, the `for input in inputs` loop, and attribute lookups;
+> the actual `result *= input` C multiply is a rounding error inside it. So the arithmetic
+> fraction is even smaller than "the sum/tanh/log rows." (2) "0% to 0.001 s precision" undersells
+> it — better framed as an *order of magnitude*: the real float work is ~50k FLOPs ≈ tens of
+> microseconds of CPU time (see 1b), buried in ~25 ms of wall-clock → arithmetic is **~0.1%**,
+> overhead is **~99.9%**. That ratio is the headline number for the `1_interpreter_tax_writeup.md`
+> deliverable. (Process note: the task asked for that file specifically — consider splitting 1a
+> and 1b into the two named write-ups; this combined `answers.md` is fine for grading though.)
+
 ## 1b. Theoretical FLOP/s from first principles (a separate session)
 
 This one assumes **no prior comfort** with FLOP counting or the roofline model — the
@@ -272,6 +379,17 @@ After reading some of https://en.wikipedia.org/wiki/Floating_point_operations_pe
 
 Further unrelated questions based on my reading:
 - can you explain the general FLOPS equation for HPC systems? more specifically:
+
+> 🟦 **GRADER — answered in the hosted HTML artifact** (link at the bottom of this file). It
+> walks the `nodes × sockets/node × cores/socket × cycles/s × FLOPs/cycle` chain with a diagram
+> and tackles each of your four sub-questions. Quick previews so the inline reading flows:
+> • **node ≈ one machine** (one OS image / motherboard), yes. • **socket = the physical CPU
+> package** plugged into the board — *nothing* to do with Linux network sockets; the name
+> collision is unfortunate. Your "~60k simultaneous sockets" fact is about TCP ports and is
+> unrelated here. • **cores/socket** is hardware: a socket physically contains N cores, so the
+> ratio is cores *per* socket, not the reverse — your "sockets/core" intuition comes from
+> conflating it with the network meaning. • **cycles/second is just clock frequency** (2.3 GHz),
+> per core. Full reasoning + diagram in the artifact.
   - make an html diagram to help me understand the variables
     - is a node a machine essentially?
     - sockets are a software construct right? like the linux sockets used in network programming? to my knowledge the average personal computer can open ~60k sockets simultaneously, is this correct?
@@ -336,6 +454,14 @@ Finally we `PLUS` all single output `Value`s for each pair (10 FLOPs), then nega
 
 47,319 + 30 + 51 = 47,400 FLOPs
 
+> 🟩🟨 **GRADER — good modeling instinct; two notes.** (a) 728→784 nudges this up: the matmul
+> core alone is `2·(784·32 + 32·10) = 2·25,408 = 50,816` FLOPs by the standard "MAC = 2 FLOPs"
+> convention, so the total is **~51k FLOPs**, not 47.4k. The exact figure barely matters — what
+> matters is the *order of magnitude*: **~5×10⁴ FLOPs.** (b) Counting `tanh` as ~20 FLOPs and
+> `**`/`log` as ~1 is a totally reasonable engineering call — and notice it's *negligible*: the
+> two matmuls dominate, which is the standard reason people quote "2·MACs" and ignore activations.
+> Keep the habit of stating the convention explicitly, as you did.
+
 ### Question
 
 Divide by the measured wall-clock (the ~30 ms anchor, or the real number from 1a) to get **achieved FLOP/s**.
@@ -343,6 +469,11 @@ Divide by the measured wall-clock (the ~30 ms anchor, or the real number from 1a
 ### Answer
 
 47,400 FLOPs / 0.117 seconds = ~405,000 FLOP/s
+
+> 🟥 **GRADER — right idea, wrong denominator (and numerator).** Use the *real* forward time,
+> 25 ms, not the cProfile 117 ms, and ~51k FLOPs: `51,000 / 0.025 ≈ **2.0×10⁶ FLOP/s ≈ 2 MFLOP/s**.
+> (For a fully fair "engine" number you might use forward+backward, ~2·51k / 0.129 s ≈ 0.8 MFLOP/s.)
+> Either way it's single-digit MFLOP/s — hold that against the peak below.
 
 ### Question
 
@@ -367,12 +498,43 @@ I'm unsure whether AVX2 instruction usage is mutually exclusive from FMA instruc
 
 I'm not sure what the separate (2 for mul+add) means, since my understanding is this is covered by FMA presence.
 
+> 🟩 **GRADER — you're right to call this out; the prompt's factoring is misleading.** "FMA" and
+> "mul+add" are *not* two independent ×2's. The clean decomposition of "FLOPs per core per cycle":
+>
+> ```
+>   lanes per SIMD register   ×   FMA execution units   ×   FLOPs per FMA
+>   (AVX2, fp64: 256/64 = 4)  ×   (this chip: 2 ports)  ×   (mul+add = 2)   = 16 fp64 FLOP/cycle
+> ```
+>
+> So the *correct* reading of the prompt's factors: "(AVX2 lanes)=4", "(2 for FMA)=**# of FMA
+> ports**, which happens to be 2 on your Coffee-Lake i9", "(2 for mul+add)=**FLOPs per FMA
+> instruction**". Your arithmetic (4×2×2=16) lands right; only the *labels* were muddled. And
+> yes — AVX2 and FMA compose: FMA is a *separate instruction set* whose ops run on those 256-bit
+> vector units, so one instruction does 4 lanes × (mul+add) = 8 fp64 FLOPs, and 2 ports issue
+> two per cycle = 16. (fp32 would be 8 lanes → 32 FLOP/cycle. Your `Value.data` is a Python
+> `float` = C `double` = fp64, so 16 is the right comparison.) Writing that assembly demo would
+> be a great exercise — `vfmadd231pd` on `ymm` registers is the instruction to reach for.
+
 The last subtlety I found is that Turbo exists according to https://www.intel.com/content/www/us/en/products/sku/192987/intel-core-i99880h-processor-16m-cache-up-to-4-80-ghz/specifications.html. This would put the clock cycle at 4.80 GHz, though I'm not sure for example how long it can be sustained.
 
 Regardless it seems according to the equation provided in the question that we have a theoretical upper bound of:
 8 * 2.3 * 10 ^ 9 * 4 * 2 * 2 = 294.4 * 10^9 FLOP/s.
 
 405,000 / (294.4 * 10^9) = 0.00000138 = 0.0000000138%. Absolutely abysmal.
+
+> 🟩🟥 **GRADER — peak is correct (294 GFLOP/s fp64); the % has a ×10⁴ slip.** `8 · 2.3e9 · 16 =
+> 294.4 GFLOP/s` ✓. But converting a fraction to a percent is ×100, not ÷100:
+> `1.38e-6` (fraction) → `1.38e-4 %` = **0.000138 %**, not `0.0000000138 %`. And with the
+> corrected achieved number (~2 MFLOP/s) it's `2e6 / 294.4e9 = 6.8e-6` = **~0.0007 % of peak**.
+> The "abysmal" verdict is dead right either way — you're ~5 orders of magnitude down.
+>
+> **One conceptual upgrade that reframes the project:** the 294 GFLOP/s peak bundles *three*
+> separate wins — 8× (multicore), ~4–8× (SIMD width), and the interpreter/representation tax.
+> To isolate the pure **interpreter tax**, compare against *single-core scalar* peak:
+> `2.3e9 cycles × 2 FMA ports × 2 FLOP ≈ 9.2 GFLOP/s`. Achieved 2 MFLOP/s → **~4,600× off even
+> without any SIMD or threads.** That ~4,600× is what a flat-array C engine buys you; the
+> remaining ~64× to the 294 GFLOP/s ceiling is what SIMD + multicore (Tasks 2+) chase. Splitting
+> the gap this way is the single most useful thing to put in `1_flops_writeup.md`.
 
 To go further, I downloaded and executed https://www.passmark.com/ and found that on my Intel(R) Core(TM) i9-9880H CPU @ 2.30GHz (x86_64) 8 cores @ 2300 MHz CPU, I have:
 
@@ -388,3 +550,27 @@ CPU Mark:                          11163
   Physics                          718 Frames/s
   Extended Instructions (SSE)      7762 Million Matrices/s
 ```
+
+> 🟩 **GRADER — nice real-world sanity anchor.** PassMark's 22,832 MFLOP/s = **~22.8 GFLOP/s** is
+> the *achievable* fp number on real mixed code, ~7.7 % of the 294 GFLOP/s theoretical ceiling —
+> which is itself a useful lesson (you never hit theoretical peak; ~5–15 % is typical for
+> non-hand-tuned code). Against that empirical number your engine at ~2 MFLOP/s is **~11,000×**
+> slower. So the three reference points to keep in mind: theoretical peak 294 G, real-world
+> ~23 G, single-core scalar ~9 G, you ~0.002 G. The project's job is to climb that ladder.
+>
+> ---
+>
+> ## 🟦 GRADER — final summary
+> **A−.** Method and self-checking are the strengths — you predicted counts from structure and
+> validated against the profiler, which is precisely the discipline this task teaches. The
+> deductions: (1) `728→784` propagated everywhere, (2) cProfile time reported as wall-clock, (3)
+> the forward==backward identity missed, (4) fraction→percent slip. None are conceptual failures;
+> they're the kind of thing the "predict *and confirm*" loop is designed to catch — three of the
+> four are things you *flagged as confusing yourself*, which means your instincts were firing;
+> you just didn't chase them down. Corrected headline numbers to carry forward:
+> **51,812 nodes · 25,545 fwd = 25,545 bwd · 25 ms forward · ~2 MFLOP/s · ~0.0007 % of peak
+> (~4,600× off single-core scalar).** HPC-equation questions answered in the linked artifact.
+>
+> **📊 HPC FLOP/s equation artifact:** https://claude.ai/code/artifact/e22d98c5-f5b5-47ab-8ff8-30e4eacc025a
+> (the chain with unit-cancellation, the `FLOPs/cycle` unpack, your i9-9880H worked out, and all
+> four node/socket/core questions). It's private to you until you share it from the page.
