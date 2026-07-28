@@ -1,5 +1,5 @@
-from src.deep_learning.layer import Layer
-from src.deep_learning.value import Value
+from deep_learning.layer import Layer
+from deep_learning.value import Value
 
 class MultiLayerPerceptron:
   def __init__(

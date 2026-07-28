@@ -1,12 +1,12 @@
 from __future__ import annotations
 from typing import Any
-from src.deep_learning.op import Op
-from src.deep_learning.op import Power
-from src.deep_learning.op import DIVIDE
-from src.deep_learning.op import EXPONENTIATE
-from src.deep_learning.op import PLUS
-from src.deep_learning.op import MINUS
-from src.deep_learning.op import MULTIPLY
+from deep_learning.op import Op
+from deep_learning.op import Power
+from deep_learning.op import DIVIDE
+from deep_learning.op import EXPONENTIATE
+from deep_learning.op import PLUS
+from deep_learning.op import MINUS
+from deep_learning.op import MULTIPLY
 
 
 def _is_numeric(x: Any) -> bool:

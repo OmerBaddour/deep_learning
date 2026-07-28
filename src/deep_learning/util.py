@@ -1,10 +1,10 @@
 import random
-from src.deep_learning.value import Value
+from deep_learning.value import Value
 import math
-from src.deep_learning.op import DIVIDE
-from src.deep_learning.op import EXPONENTIATE
-from src.deep_learning.op import LOGARITHM
-from src.deep_learning.op import PLUS
+from deep_learning.op import DIVIDE
+from deep_learning.op import EXPONENTIATE
+from deep_learning.op import LOGARITHM
+from deep_learning.op import PLUS
 from graphviz import Digraph
 
 

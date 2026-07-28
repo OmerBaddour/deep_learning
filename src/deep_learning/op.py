@@ -75,16 +75,18 @@ class Multiply(Op):
     return result
 
   def backward(self, inputs: list[float]) -> list[float]:
-    '''
-    Identical problem to https://leetcode.com/problems/product-of-array-except-self/
-    '''
-    product_before = [1.0] * len(inputs)
-    product_after = [1.0] * len(inputs)
-    for i in range(1, len(inputs)):
-      product_before[i] = product_before[i-1] * inputs[i-1]
-    for i in range(len(inputs)-2, -1, -1):
-      product_after[i] = product_after[i+1] * inputs[i+1]
-    return [before * after for (before, after) in zip(product_before, product_after, strict=True)]
+    if len(inputs) == 2:
+      # Common case worth isolating for performance
+      return [inputs[1], inputs[0]]
+    else:
+      # Identical problem to https://leetcode.com/problems/product-of-array-except-self/
+      product_before = [1.0] * len(inputs)
+      product_after = [1.0] * len(inputs)
+      for i in range(1, len(inputs)):
+        product_before[i] = product_before[i-1] * inputs[i-1]
+      for i in range(len(inputs)-2, -1, -1):
+        product_after[i] = product_after[i+1] * inputs[i+1]
+      return [before * after for (before, after) in zip(product_before, product_after, strict=True)]
 
 
 class Power(Op):
