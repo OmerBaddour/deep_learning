@@ -1,28 +1,43 @@
-#include "stdio.h"
-#include "stdlib.h"
+#include <stdio.h>
+#include <stdlib.h>
 
 #define ARRAY_LENGTH 256
-#define AVX2_BYTES_PER_VECTOR 32
 
-int main() {
-  float array_1[ARRAY_LENGTH] = {1};
-  float array_2[ARRAY_LENGTH] = {2};
-  float array_result[ARRAY_LENGTH] = {0};
-  
-  int size_array_element = sizeof(array_1[0]);
-  int num_lanes = AVX2_BYTES_PER_VECTOR / size_array_element;
-  int num_vmovups_operations = ARRAY_LENGTH / num_lanes;
-  printf("my system has AVX2 (%u bytes per vector)\n", AVX2_BYTES_PER_VECTOR);
-  printf("size of each array element: %u\n", size_array_element);
-  printf("we expect %u lanes, and %u vmovups operations\n\n", num_lanes, num_vmovups_operations);
+// -> vaddps on ymm registers
+void add_arrays(
+    const float *restrict a,
+    const float *restrict b,
+    float *restrict out
+) {
+  for (int i = 0; i < ARRAY_LENGTH; i++) {
+    out[i] = a[i] + b[i];
+  }
+}
 
-  for (size_t i = 0; i < ARRAY_LENGTH; i++) {
-    array_result[i] = array_1[i] * array_2[i];
+// -> vfmadd213ps: multiply and accumulate in one instruction
+void fma_arrays(
+    const float *restrict a,
+    const float *restrict b,
+    const float *restrict c,
+    float *restrict out
+) {
+  for (int i = 0; i < ARRAY_LENGTH; i++) {
+    out[i] = a[i] * b[i] + c[i];
   }
-  printf("array result values: ");
-  for (size_t i = 0; i < ARRAY_LENGTH; i++) {
-    printf("%f, ", array_result[i]);
+}
+
+int main(void) {
+  float a[ARRAY_LENGTH], b[ARRAY_LENGTH], c[ARRAY_LENGTH], out[ARRAY_LENGTH];
+  for (int i = 0; i < ARRAY_LENGTH; i++) {
+    a[i] = (float)rand() / RAND_MAX; // [0, 1]
+    b[i] = (float)rand() / RAND_MAX;
+    c[i] = (float)rand() / RAND_MAX;
   }
-  printf("\n");
+
+  add_arrays(a, b, out);
+  printf("add: %f\n", out[0]);
+
+  fma_arrays(a, b, c, out);
+  printf("fma: %f\n", out[0]);
   return 0;
 }

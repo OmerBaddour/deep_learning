@@ -1,24 +1,29 @@
-CC     := clang
-ALL    := normal compiler_auto_vectorization intrinsics
+CC       := clang
+CFLAGS   := -Wall -Wextra
+AVXFLAGS := -O3 -mavx2 -mfma
 
-.PHONY: all normal compiler_auto_vectorization intrinsics objdump clean
+ALL      := normal compiler_auto_vectorization intrinsics
+DUMPS    := $(addsuffix .txt,$(ALL))
+
+.PHONY: all objdump clean
 
 all: $(ALL)
 
 normal: float_array_sum.c
-	$(CC) float_array_sum.c -o normal
+	$(CC) $(CFLAGS) -O0 float_array_sum.c -o $@
 
 compiler_auto_vectorization: float_array_sum.c
-	$(CC) -O3 -mavx2 -mfma float_array_sum.c -o compiler_auto_vectorization
+	$(CC) $(CFLAGS) $(AVXFLAGS) float_array_sum.c -o $@
 
-# TODO: figure out how to only execute on existing `target`s
-objdump: $(ALL)
-	@for target in $(ALL); do \
-		objdump -d $$target > $$target.txt; \
-	done
+intrinsics: float_array_sum_intrinsics.c
+	$(CC) $(CFLAGS) $(AVXFLAGS) float_array_sum_intrinsics.c -o $@
+
+# Pattern rule: each dump depends on its binary, so make builds whatever is
+# missing and skips whatever is already up to date.
+%.txt: %
+	objdump -d $< > $@
+
+objdump: $(DUMPS)
 
 clean:
-	rm -f $(ALL)
-	@for target in $(ALL); do \
-		rm -rf $$target.txt; \
-	done
+	rm -f $(ALL) $(DUMPS)
